@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Print Studio | Портфолио</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --primary: #58c86b;
+      --secondary: #2cab6b;
+      --accent: #9be7a8;
+      --success: #58c86b;
+      --error: #ff4757;
+      --text: #f5f5f5;
+      --text-muted: rgba(255,255,255,.78);
+      --gray: #8b8b8b;
+      --bg-0: #0f0f12;
+      --bg-1: #17171b;
+      --glass: rgba(23,23,27,.7);
+      --glass-border: rgba(88,200,107,.25);
+      --shadow: 0 12px 40px rgba(0,0,0,.4);
+    }
+
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial;
+      background: var(--bg-0);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(60% 40% at 10% 20%, rgba(88,200,107,.18), transparent 70%),
+        radial-gradient(50% 35% at 90% 15%, rgba(88,200,107,.12), transparent 70%),
+        radial-gradient(65% 45% at 70% 85%, rgba(155,231,168,.10), transparent 70%);
+      z-index: -2;
+      pointer-events: none;
+    }
+
+    /* Навигация */
+    .navbar {
+      position: fixed; inset-inline: 0; top: 0; z-index: 1000;
+      background: rgba(20,20,26,.72);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--glass-border);
+      padding: 16px 0;
+      transition: background .25s ease, padding .25s ease;
+    }
+    .navbar.scrolled { background: rgba(10,10,12,.86); padding: 12px 0; }
+    .nav-container { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-weight: 800; font-size: 1.4rem; color: var(--text); text-decoration: none; }
+    .nav-menu { list-style: none; display: flex; gap: 20px; margin: 0; padding: 0; }
+    .nav-link { color: var(--text); text-decoration: none; padding: 10px 14px; border-radius: 12px; font-weight: 500; }
+    .nav-link:hover { background: rgba(255,255,255,.06); color: var(--primary); }
+
+    /* Hero */
+    .hero { min-height: 40svh; display: grid; place-items: center; text-align: center; padding: 0 20px; }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 900; line-height: 1.08;
+      background: linear-gradient(135deg, var(--text), var(--accent));
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p { max-width: 800px; margin: 14px auto 28px; color: var(--text-muted); font-size: clamp(1rem, 2.2vw, 1.2rem); }
+    .cta-button { 
+      display: inline-block; padding: 12px 20px; border-radius: 999px; 
+      background: linear-gradient(135deg, var(--primary), var(--secondary)); 
+      color: #06140a; text-decoration: none; font-weight: 700; 
+      box-shadow: var(--shadow); border: none; cursor: pointer;
+    }
+    .cta-button:hover { transform: translateY(-1px); }
+
+    /* Контент */
+    .main-content { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+    .portfolio-section { display: grid; grid-template-columns: 380px 1fr; gap: 36px; margin: 80px 0 100px; align-items: start; }
+    .glass-card { 
+      background: var(--glass); border: 1px solid var(--glass-border); 
+      border-radius: 16px; padding: 28px; backdrop-filter: blur(12px); 
+      box-shadow: var(--shadow); transition: transform .25s ease, border-color .25s ease;
+    }
+    .glass-card:hover { transform: translateY(-4px); border-color: var(--primary); }
+    .photo-card { position: sticky; top: 96px; text-align: center; }
+   .photo-placeholder {
+ height: 357px;
+ border-radius: 12px;
+ background: linear-gradient(135deg, #222, #1a1a1f);
+ display: grid;
+ place-items: center;
+ color: var(--primary);
+ margin-bottom: 16px;
+ overflow: hidden;
+}
+
+.photo {
+ max-width: 100%;
+ max-height: 100%;
+ width: auto;
+ height: auto;
+ object-fit: cover;
+ object-position: 50% 20%; /* Отрицательное значение для сдвига вверх */
+ border-radius: 12px;
+}
+    .biography-title { font-size: clamp(1.8rem, 3.5vw, 2.2rem); margin-bottom: 16px; color: var(--primary); }
+    .biography-text { font-size: clamp(0.8rem, 2.3vw, 1.3rem); color: var(--text-muted); line-height: 1.7; margin-bottom: 14px; }
+    
+    .section-header { text-align: center; margin-bottom: 36px; }
+    .section-title { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 900; background: linear-gradient(135deg, var(--text), var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    .projects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 64px; }
+    .project-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 18px; overflow: hidden; cursor: pointer; transition: transform .25s ease, border-color .25s ease; }
+    .project-card:hover { transform: translateY(-6px); border-color: var(--primary); box-shadow: var(--shadow); }
+    .project-image { height: 220px; background: linear-gradient(135deg, #26262b, #1a1a1f); background-size: cover; background-position: center; display: grid; place-items: center; color: var(--primary); }
+    .project-content { padding: 20px; }
+    .project-name { margin: 0 0 8px; color: var(--primary); font-size: 1.25rem; font-weight: 700; }
+    .project-description { color: var(--text-muted); margin-bottom: 10px; }
+    .project-price { color: #a6f3b3; font-weight: 800; }
+
+    /* Модалка проекта */
+    .project-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.85); backdrop-filter: blur(6px); z-index: 2000; padding: 16px; }
+    .project-modal.show { display: flex; }
+    .modal-content { width: min(1100px, 100%); max-height: 92svh; border-radius: 18px; overflow: hidden; background: var(--bg-1); border: 1px solid var(--glass-border); box-shadow: var(--shadow); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--glass-border); background: rgba(0,0,0,.25); }
+    .modal-title { margin: 0; font-size: 1.4rem; }
+    .close-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: var(--gray); font-size: 24px; cursor: pointer; }
+    .close-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
+    .modal-body { display: grid; grid-template-columns: 2fr 1fr; min-height: 480px; }
+    .modal-left { background: #131317; position: relative; }
+    .modal-image { position: absolute; inset: 0; background: #222; background-size: cover; background-position: center; display: grid; place-items: center; color: var(--primary); }
+    .image-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,.6); color: #fff; border: 0; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 18px; display: none; align-items: center; justify-content: center; }
+    .image-nav:hover { background: var(--primary); color: #06140a; }
+    .prev-btn { left: 12px; }
+    .next-btn { right: 12px; }
+    .image-counter { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.6); color: #fff; padding: 6px 10px; border-radius: 999px; font-size: 12px; }
+    .modal-right { background: #101014; display: flex; flex-direction: column; }
+    .modal-content-section { padding: 20px; flex: 1; overflow: auto; }
+    .project-detail-title { margin: 0 0 10px; color: var(--primary); }
+    .project-detail-description { color: var(--text-muted); line-height: 1.7; }
+    .modal-price-section { padding: 16px 20px; border-top: 1px solid var(--glass-border); background: rgba(0,0,0,.25); text-align: center; }
+    .price-label { color: var(--gray); font-size: .95rem; }
+    .price-value { font-size: 2rem; font-weight: 900; color: #a6f3b3; }
+
+    /* Админ-панель */
+    .admin-panel {
+      position: fixed;
+      top: 0;
+      right: -550px;
+      width: 550px;
+      height: 100vh;
+      background: var(--bg-1);
+      backdrop-filter: blur(30px);
+      z-index: 3000;
+      transition: right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border-left: 1px solid var(--glass-border);
+      overflow-y: auto;
+      box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+      display: none;
+    }
+    .admin-panel.active { right: 0; display: block; }
+    
+    .admin-header {
+      padding: 30px;
+      background: var(--bg-0);
+      border-bottom: 1px solid var(--glass-border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .admin-title { font-size: 2rem; color: var(--primary); margin-bottom: 10px; font-weight: 700; }
+    .close-admin {
+      position: absolute;
+      top: 25px;
+      right: 25px;
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+      width: 40px;
+      height: 40px;
+    }
+    .close-admin:hover { background: var(--error); color: var(--text); transform: rotate(90deg); }
+    
+    .admin-content { padding: 30px; }
+    .admin-tabs {
+      display: flex;
+      margin-bottom: 30px;
+      border-radius: 12px;
+      background: var(--glass);
+      padding: 4px;
+    }
+    .admin-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      padding: 12px 20px;
+      color: var(--gray);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+    .admin-tab.active { background: var(--primary); color: var(--bg-0); }
+    
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    .form-group { margin-bottom: 25px; }
+    .form-label { display: block; color: var(--primary); margin-bottom: 8px; font-weight: 600; }
+    .form-input, .form-textarea {
+      width: 100%;
+      padding: 15px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 16px;
+      transition: all 0.3s ease;
+    }
+    .form-input:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 0 0 3px rgba(88, 200, 107, 0.1);
+    }
+    .form-textarea { resize: vertical; min-height: 120px; }
+    
+    .image-upload-area {
+      border: 2px dashed var(--glass-border);
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      background: var(--glass);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    .image-upload-area.dragover { border-color: var(--primary); background: rgba(88, 200, 107, 0.1); }
+    .upload-text { color: var(--gray); font-size: 16px; margin-bottom: 10px; }
+    
+    .uploaded-images {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .uploaded-image { position: relative; border-radius: 8px; overflow: hidden; background: var(--glass); aspect-ratio: 1; }
+    .uploaded-image img { width: 100%; height: 100%; object-fit: cover; }
+    .remove-image { position: absolute; top: 5px; right: 5px; background: var(--error); color: var(--text); border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: grid; place-items: center; }
+    
+    .btn { padding: 15px 30px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+    .btn-primary { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: var(--bg-0); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(88, 200, 107, 0.3); }
+    .btn-success { background: var(--success); color: var(--bg-0); padding: 8px 16px; font-size: 14px; }
+    .btn-danger { background: var(--error); color: var(--text); padding: 8px 16px; font-size: 14px; }
+    .btn-danger:hover { background: #ff3742; transform: scale(1.05); }
+    
+    .project-list { display: grid; gap: 20px; }
+    .project-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; padding: 25px; transition: all 0.3s ease; }
+    .project-item:hover { border-color: var(--primary); transform: translateX(5px); }
+    .project-item h4 { color: var(--primary); margin-bottom: 10px; font-size: 1.2rem; }
+    .project-item p { color: var(--text-muted); margin-bottom: 15px; line-height: 1.5; }
+    .project-actions { display: flex; gap: 10px; margin-top: 15px; }
+
+    /* Контакты */
+    .contacts-section { text-align: center; margin: 20px 0 80px; }
+    .contact-info { font-size: 1.05rem; color: var(--text-muted); line-height: 1.8; }
+
+    /* Сообщения */
+    .message { position: fixed; top: 90px; right: 24px; padding: 12px 16px; border-radius: 12px; font-weight: 700; transform: translateX(340px); transition: transform .3s ease; z-index: 5000; }
+    .message.show { transform: translateX(0); }
+    .message.success { background: #a6f3b3; color: #062312; }
+    .message.error { background: var(--error); color: #fff; }
+
+    @media (max-width: 1024px) {
+      .portfolio-section { grid-template-columns: 1fr; }
+      .photo-card { position: static; }
+    }
+    @media (max-width: 768px) {
+      .modal-body { grid-template-columns: 1fr; }
+      .projects-grid { grid-template-columns: 1fr; }
+      .admin-panel { width: 100%; right: -100%; }
+      .image-nav { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="#home" class="logo">M3D KZN</a>
+      <ul class="nav-menu">
+        <li><a class="nav-link" href="#home">Главная</a></li>
+        <li><a class="nav-link" href="#portfolio">О нас</a></li>
+        <li><a class="nav-link" href="#projects">Проекты</a></li>
+        <li><a class="nav-link" href="#contacts">Контакты</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section id="home" class="hero">
+    <div class="hero-content">
+      <h1>ПОРТФОЛИО СПЕЦИАЛИСТА В СФЕРЕ АДДИТИВНЫХ ТЕХНОЛОГИЙ</h1>
+      <p></p>
+      <a href="#projects" class="cta-button">Посмотреть проекты</a>
+    </div>
+  </section>
+
+  <main class="main-content">
+    <section id="portfolio" class="portfolio-section">
+      <div class="glass-card photo-card">
+<div class="photo-placeholder">
+ <img 
+ src="https://sun9-84.userapi.com/s/v1/ig2/FZS6f7unVWz60WbtLfrole1Cx46VjdyctJw1wxwj_xvJAsekLu0QIUriZ6g-R5ovmqKDS29hoUee_XIYZ1BzHntI.jpg?quality=95&as=32x43,48x64,72x96,108x144,160x214,240x321,360x481,480x641,540x721,640x855,720x962,1080x1443,1280x1710,1440x1924,1916x2560&from=bu&cs=1916x0" 
+
+ class="photo" >
+</div>
+
+        <h2 style="margin:0;color:var(--primary)"></h2>
+      </div>
+      <div class="glass-card">
+        <h2 class="biography-title"></h2>
+        <p class="biography-text">Привeтствую, увaжaемые гости данного портфолио. Mеня зoвут Миxaил. Пpeдocтaвляю уcлуги 3Д-пeчaти и вcе сопутcтвующиe услуги в cфеpe aддитивныx тexнoлoгий пo горoду Казaнь.</p>
+        <p class="biography-text">На данном сайте представлены завершённые проекты, в которых я выступал в качестве исполнителя.</p>
+      </div>
+    </section>
+
+    <section id="projects">
+      <div class="section-header"><h2 class="section-title">МОИ ПРОЕКТЫ</h2></div>
+      <div class="projects-grid" id="projectsGrid"></div>
+    </section>
+
+    <section id="contacts" class="contacts-section glass-card">
+      <h2 class="section-title" style="-webkit-text-fill-color:unset;color:var(--text)">СВЯЗЬ СО МНОЙ</h2>
+      <div class="contact-info">
+<p>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M16.1007 13.359L15.5719 12.8272H15.5719L16.1007 13.359ZM16.5562 12.9062L17.085 13.438H17.085L16.5562 12.9062ZM18.9728 12.5894L18.6146 13.2483L18.9728 12.5894ZM20.8833 13.628L20.5251 14.2869L20.8833 13.628ZM21.4217 16.883L21.9505 17.4148L21.4217 16.883ZM20.0011 18.2954L19.4723 17.7636L20.0011 18.2954ZM18.6763 18.9651L18.7459 19.7119H18.7459L18.6763 18.9651ZM8.81536 14.7266L9.34418 14.1947L8.81536 14.7266ZM4.00289 5.74561L3.2541 5.78816L3.2541 5.78816L4.00289 5.74561ZM10.4775 7.19738L11.0063 7.72922H11.0063L10.4775 7.19738ZM10.6342 4.54348L11.2346 4.09401L10.6342 4.54348ZM9.37326 2.85908L8.77286 3.30855V3.30855L9.37326 2.85908ZM6.26145 2.57483L6.79027 3.10667H6.79027L6.26145 2.57483ZM4.69185 4.13552L4.16303 3.60368H4.16303L4.69185 4.13552ZM12.0631 11.4972L12.5919 10.9654L12.0631 11.4972ZM16.6295 13.8909L17.085 13.438L16.0273 12.3743L15.5719 12.8272L16.6295 13.8909ZM18.6146 13.2483L20.5251 14.2869L21.2415 12.9691L19.331 11.9305L18.6146 13.2483ZM20.8929 16.3511L19.4723 17.7636L20.5299 18.8273L21.9505 17.4148L20.8929 16.3511ZM18.6067 18.2184C17.1568 18.3535 13.4056 18.2331 9.34418 14.1947L8.28654 15.2584C12.7186 19.6653 16.9369 19.8805 18.7459 19.7119L18.6067 18.2184ZM9.34418 14.1947C5.4728 10.3453 4.83151 7.10765 4.75168 5.70305L3.2541 5.78816C3.35456 7.55599 4.14863 11.144 8.28654 15.2584L9.34418 14.1947ZM10.7195 8.01441L11.0063 7.72922L9.9487 6.66555L9.66189 6.95073L10.7195 8.01441ZM11.2346 4.09401L9.97365 2.40961L8.77286 3.30855L10.0338 4.99296L11.2346 4.09401ZM5.73263 2.04299L4.16303 3.60368L5.22067 4.66736L6.79027 3.10667L5.73263 2.04299ZM10.1907 7.48257C9.66189 6.95073 9.66117 6.95144 9.66045 6.95216C9.66021 6.9524 9.65949 6.95313 9.659 6.95362C9.65802 6.95461 9.65702 6.95561 9.65601 6.95664C9.65398 6.95871 9.65188 6.96086 9.64972 6.9631C9.64539 6.96759 9.64081 6.97245 9.63599 6.97769C9.62634 6.98816 9.61575 7.00014 9.60441 7.01367C9.58174 7.04072 9.55605 7.07403 9.52905 7.11388C9.47492 7.19377 9.41594 7.2994 9.36589 7.43224C9.26376 7.70329 9.20901 8.0606 9.27765 8.50305C9.41189 9.36833 10.0078 10.5113 11.5343 12.0291L12.5919 10.9654C11.1634 9.54499 10.8231 8.68059 10.7599 8.27309C10.7298 8.07916 10.761 7.98371 10.7696 7.96111C10.7748 7.94713 10.7773 7.9457 10.7709 7.95525C10.7677 7.95992 10.7624 7.96723 10.7541 7.97708C10.75 7.98201 10.7451 7.98759 10.7394 7.99381C10.7365 7.99692 10.7335 8.00019 10.7301 8.00362C10.7285 8.00534 10.7268 8.00709 10.725 8.00889C10.7241 8.00979 10.7232 8.0107 10.7223 8.01162C10.7219 8.01208 10.7212 8.01278 10.7209 8.01301C10.7202 8.01371 10.7195 8.01441 10.1907 7.48257ZM11.5343 12.0291C13.0613 13.5474 14.2096 14.1383 15.0763 14.2713C15.5192 14.3392 15.8763 14.285 16.1472 14.1841C16.28 14.1346 16.3858 14.0763 16.4658 14.0227C16.5058 13.9959 16.5392 13.9704 16.5663 13.9479C16.5799 13.9367 16.5919 13.9262 16.6024 13.9166C16.6077 13.9118 16.6126 13.9073 16.6171 13.903C16.6194 13.9008 16.6215 13.8987 16.6236 13.8967C16.6246 13.8957 16.6256 13.8947 16.6266 13.8937C16.6271 13.8932 16.6279 13.8925 16.6281 13.8923C16.6288 13.8916 16.6295 13.8909 16.1007 13.359C15.5719 12.8272 15.5726 12.8265 15.5733 12.8258C15.5735 12.8256 15.5742 12.8249 15.5747 12.8244C15.5756 12.8235 15.5765 12.8226 15.5774 12.8217C15.5793 12.82 15.581 12.8183 15.5827 12.8166C15.5862 12.8133 15.5895 12.8103 15.5926 12.8074C15.5988 12.8018 15.6044 12.7969 15.6094 12.7929C15.6192 12.7847 15.6265 12.7795 15.631 12.7764C15.6403 12.7702 15.6384 12.773 15.6236 12.7785C15.5991 12.7876 15.501 12.8189 15.3038 12.7886C14.8905 12.7253 14.02 12.3853 12.5919 10.9654L11.5343 12.0291ZM9.97365 2.40961C8.95434 1.04802 6.94996 0.83257 5.73263 2.04299L6.79027 3.10667C7.32195 2.578 8.26623 2.63181 8.77286 3.30855L9.97365 2.40961ZM4.75168 5.70305C4.73201 5.35694 4.89075 4.9954 5.22067 4.66736L4.16303 3.60368C3.62571 4.13795 3.20329 4.89425 3.2541 5.78816L4.75168 5.70305ZM19.4723 17.7636C19.1975 18.0369 18.9029 18.1908 18.6067 18.2184L18.7459 19.7119C19.4805 19.6434 20.0824 19.2723 20.5299 18.8273L19.4723 17.7636ZM11.0063 7.72922C11.9908 6.7503 12.064 5.2019 11.2346 4.09401L10.0338 4.99295C10.4373 5.53193 10.3773 6.23938 9.9487 6.66555L11.0063 7.72922ZM20.5251 14.2869C21.3429 14.7315 21.4703 15.7769 20.8929 16.3511L21.9505 17.4148C23.2908 16.0821 22.8775 13.8584 21.2415 12.9691L20.5251 14.2869ZM17.085 13.438C17.469 13.0562 18.0871 12.9616 18.6146 13.2483L19.331 11.9305C18.2474 11.3414 16.9026 11.5041 16.0273 12.3743L17.085 13.438Z" fill="#FFFFFF"/>
+</svg>
+
+  <span>+7 922 891 3661</span>
+</p>
+
+
+		
+<p>
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23.91 3.79L20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73z"></path>
+  </svg> @sinisterfate
+</p>
+
+
+        <p>		<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+		<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M3 8L8.44992 11.6333C9.73295 12.4886 10.3745 12.9163 11.0678 13.0825C11.6806 13.2293 12.3194 13.2293 12.9322 13.0825C13.6255 12.9163 14.2671 12.4886 15.5501 11.6333L21 8M6.2 19H17.8C18.9201 19 19.4802 19 19.908 18.782C20.2843 18.5903 20.5903 18.2843 20.782 17.908C21 17.4802 21 16.9201 21 15.8V8.2C21 7.0799 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V15.8C3 16.9201 3 17.4802 3.21799 17.908C3.40973 18.2843 3.71569 18.5903 4.09202 18.782C4.51984 19 5.07989 19 6.2 19Z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
+		 <span> <a href="mailto:m3dkzn@gmail.com" style="color: white;">m3dkzn@gmail.com</a></p></span>
+        <p>
+		<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+		<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="#ffffff"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path d="M19 10C19 13.9765 12 21 12 21C12 21 5 13.9765 5 10C5 6.02355 8.13401 3 12 3C15.866 3 19 6.02355 19 10Z" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><circle cx="12" cy="10" r="3" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></circle></g></svg> <span> Казань</span></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Модалка проекта -->
+  <div class="project-modal" id="projectModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">НАЗВАНИЕ ПРОЕКТА</h2>
+        <button class="close-btn" onclick="closeProject()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-left">
+          <div class="modal-image" id="modalImage">Загрузка…</div>
+          <button class="image-nav prev-btn" id="prevBtn" onclick="prevImage()">‹</button>
+          <button class="image-nav next-btn" id="nextBtn" onclick="nextImage()">›</button>
+          <div class="image-counter" id="imageCounter">1 / 1</div>
+        </div>
+        <div class="modal-right">
+          <div class="modal-content-section">
+            <h3 class="project-detail-title">Описание проекта</h3>
+            <p class="project-detail-description" id="modalDescription">Загрузка описания…</p>
+          </div>
+          <div class="modal-price-section">
+            <div class="price-label">СТОИМОСТЬ</div>
+            <div class="price-value"><span id="projectPrice">0</span> ₽</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Авторизация (из (3), адаптирована под стили (2)) -->
+  <div class="project-modal" id="authModal" style="display:none">
+    <div class="modal-content" style="max-width:480px">
+      <div class="modal-header">
+        <h2 class="modal-title">🔒 Админ-панель</h2>
+        <button class="close-btn" onclick="closeAuth()">×</button>
+      </div>
+      <div class="modal-body" style="display:block;padding:20px">
+        <p style="color:var(--text-muted);margin:0 0 12px">Введите пароль доступа</p>
+        <input type="password" id="adminPassword" placeholder="Пароль" style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text)" />
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button class="cta-button" onclick="checkPassword()">Войти</button>
+          <button class="btn-danger" onclick="closeAuth()">Отмена</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Админ-панель (из (3), стилизована как (2)) -->
+  <div class="admin-panel" id="adminPanel">
+    <div class="admin-header">
+      <h2 class="admin-title">🛠️ Панель управления</h2>
+      <button class="close-admin" onclick="closeAdmin()">×</button>
+    </div>
+    <div class="admin-content">
+      <div class="admin-tabs">
+        <button class="admin-tab active" onclick="switchTab('add')">Добавить</button>
+        <button class="admin-tab" onclick="switchTab('manage')">Управление</button>
+      </div>
+      
+      <div id="addTab" class="tab-content active">
+        <form onsubmit="saveProject(event)" id="projectForm">
+          <input type="hidden" id="editingId" value="">
+          <div class="form-group">
+            <label class="form-label">📝 Название проекта</label>
+            <input type="text" class="form-input" id="projectName" required placeholder="Введите название проекта">
+          </div>
+          <div class="form-group">
+            <label class="form-label">📋 Описание</label>
+            <textarea class="form-textarea" id="projectDescription" required placeholder="Подробно опишите проект, технологии, материалы…"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">💰 Цена (₽)</label>
+            <input type="number" class="form-input" id="projectPriceInput" min="0" required placeholder="Введите стоимость">
+          </div>
+          <div class="form-group">
+            <label class="form-label">🖼️ Изображения проекта</label>
+            <div class="image-upload-area" id="imageUploadArea">
+              <div class="upload-text">📤 Перетащите изображения сюда или нажмите для выбора</div>
+              <input type="file" id="imageInput" multiple accept="image/*" style="display: none;">
+            </div>
+            <div class="uploaded-images" id="uploadedImages"></div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="saveBtn">✅ Сохранить проект</button>
+          <button type="button" class="btn btn-danger" onclick="cancelEdit()" id="cancelBtn" style="display: none; margin-left: 10px;">❌ Отмена</button>
+        </form>
+      </div>
+      
+      <div id="manageTab" class="tab-content">
+        <div class="project-list" id="projectList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Конфиг: поддерживаем оба варианта авторизации
+    // Если ADMIN_PASSWORD непустой — используем проверку пароля как в (3).
+    // Если пустой — используется установка/проверка хеша, как в (2).
+    const CONFIG = {
+      MAX_IMAGES: 10,
+      MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
+      ADMIN_HASH_KEY: '3d_admin_hash',
+      ADMIN_PASSWORD: '3DStudio_SuperSecure_2025!@#$' // можно указать, например: '3DStudio_SuperSecure_2025!@#$'
+    };
+
+    const state = { projects: [], currentProject: null, currentImageIndex: 0, isAdminAuthenticated: false, editingProjectId: null, uploadedFiles: [] };
+
+    // Демо-данные
+    const DEFAULT_PROJECTS = [
+      { id: 1, name: 'Промышленные прототипы', description: 'Высокоточное прототипирование для промышленности с использованием технологий SLA, SLS и FDM.', images: ['https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=600&fit=crop'], price: 2500 },
+      { id: 2, name: 'Архитектурные макеты', description: 'Детализированные архитектурные модели зданий, районов и ландшафтных решений.', images: ['https://images.unsplash.com/photo-1503387837-b154d5074bd2?w=800&h=600&fit=crop'], price: 15000 },
+      { id: 3, name: 'Медицинские модели', description: 'Биосовместимые материалы для точных анатомических моделей, хирургических шаблонов.', images: ['https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800&h=600&fit=crop'], price: 8000 }
+    ];
+
+    // Утилиты
+    const utils = {
+      id: () => Date.now() + Math.random(),
+      price: (p) => new Intl.NumberFormat('ru-RU').format(p),
+      msg(text, type = 'success') {
+        const el = document.createElement('div');
+        el.className = `message ${type}`; el.textContent = text; document.body.appendChild(el);
+        setTimeout(() => el.classList.add('show'), 50);
+        setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300) }, 2800);
+      },
+      trunc: (t, n) => t.length > n ? t.slice(0, n) + '…' : t,
+      async sha(text) {
+        if (!window.crypto?.subtle) return `plain:${text}`;
+        const enc = new TextEncoder().encode(text);
+        const hash = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      },
+      validateImage(file) {
+        if (!file.type.startsWith('image/')) throw new Error('Файл должен быть изображением');
+        if (file.size > CONFIG.MAX_IMAGE_SIZE) throw new Error('Размер не должен превышать 5 MB');
+        return true;
+      }
+    };
+
+    // Хранилище
+    const storage = {
+      save() { try { localStorage.setItem('3d_studio_projects', JSON.stringify(state.projects)); } catch(_){} },
+      load() {
+        try { const s = localStorage.getItem('3d_studio_projects'); state.projects = s ? JSON.parse(s) : DEFAULT_PROJECTS; } catch(_) { state.projects = DEFAULT_PROJECTS; }
+      }
+    };
+
+    // Работа с изображениями
+    const imageHandler = {
+      toBase64(file){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); },
+      async process(files){ const out = []; for (const f of files){ try { utils.validateImage(f); out.push({ id: utils.id(), name: f.name, data: await this.toBase64(f) }); } catch(e){ utils.msg(`Ошибка ${f.name}: ${e.message}`, 'error'); } } return out; }
+    };
+
+    // Логика проектов
+    const projectManager = {
+      async create(d){ 
+        const p = { id: utils.id(), name: d.name, description: d.description, price: parseInt(d.price,10)||0, images: d.images||[], createdAt: new Date().toISOString() }; 
+        state.projects.push(p); storage.save(); ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект создан'); return p; 
+      },
+      async update(id, d){ 
+        const i = state.projects.findIndex(p=>p.id===id); if(i<0) throw new Error('Проект не найден'); 
+        state.projects[i] = { ...state.projects[i], name:d.name, description:d.description, price: parseInt(d.price,10)||0, images: d.images?.length? d.images : state.projects[i].images, updatedAt: new Date().toISOString() }; 
+        storage.save(); ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект обновлён'); return state.projects[i]; 
+      },
+      delete(id){ 
+        const i = state.projects.findIndex(p=>p.id===id); if(i<0) return; 
+        if(confirm('Удалить проект?')){ state.projects.splice(i,1); storage.save(); ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект удалён'); } 
+      },
+      get: (id) => state.projects.find(p=>p.id===id)
+    };
+
+    // UI
+    const ui = {
+      loadProjects(){ 
+        const grid = document.getElementById('projectsGrid'); grid.innerHTML=''; 
+        state.projects.forEach(project=>{ 
+          const card = document.createElement('div'); 
+          card.className='project-card'; 
+          card.onclick=()=>ui.openProject(project); 
+          const img = project.images?.[0] ? (typeof project.images[0]==='string'? project.images[0] : project.images[0].data) : '';
+          card.innerHTML = `
+            <div class="project-image" style="${img?`background-image:url('${img}')`:''}">${img? '' : '📦 Изображение проекта'}</div>
+            <div class="project-content">
+              <h3 class="project-name">${project.name}</h3>
+              <p class="project-description">${utils.trunc(project.description, 120)}</p>
+              <div class="project-price">${utils.price(project.price)} ₽</div>
+            </div>`; 
+          grid.appendChild(card); 
+        }); 
+      },
+      openProject(project){
+        state.currentProject = project;
+        state.currentImageIndex = 0;
+        document.getElementById('modalTitle').textContent = project.name;
+        document.getElementById('modalDescription').textContent = project.description;
+        document.getElementById('projectPrice').textContent = utils.price(project.price);
+        this.updateModalImage();
+        this.updateImageNavigation();
+        document.getElementById('projectModal').classList.add('show');
+      },
+      closeProject(){ document.getElementById('projectModal').classList.remove('show'); state.currentProject=null; },
+      updateModalImage(){
+        const modalImage = document.getElementById('modalImage');
+        const p = state.currentProject; if(!p){ modalImage.textContent=''; return; }
+        const imgs = p.images || [];
+        if(!imgs.length){ modalImage.style.backgroundImage='none'; modalImage.textContent='Нет изображений'; return; }
+        const current = imgs[state.currentImageIndex];
+        const url = typeof current === 'string' ? current : current.data;
+        modalImage.style.backgroundImage = `url('${url}')`;
+        modalImage.textContent = '';
+      },
+      updateImageNavigation(){
+        const p = state.currentProject; const prevBtn = document.getElementById('prevBtn'); const nextBtn = document.getElementById('nextBtn'); const counter = document.getElementById('imageCounter');
+        const imgs = p?.images || [];
+        if(imgs.length <= 1){ prevBtn.style.display='none'; nextBtn.style.display='none'; counter.textContent='1 / 1'; return; }
+        prevBtn.style.display='flex'; nextBtn.style.display='flex'; counter.textContent = `${state.currentImageIndex + 1} / ${imgs.length}`;
+        prevBtn.disabled = state.currentImageIndex === 0;
+        nextBtn.disabled = state.currentImageIndex === imgs.length - 1;
+      },
+      loadProjectList(){ 
+        const list = document.getElementById('projectList'); if(!list) return; list.innerHTML=''; 
+        if(!state.projects.length){ list.innerHTML='<p style="color:var(--gray);text-align:center">Проекты не найдены</p>'; return; }
+        state.projects.forEach(p=>{ 
+          const div = document.createElement('div'); 
+          div.className='project-item'; 
+          const img = p.images?.[0] ? (typeof p.images[0]==='string'? p.images[0] : p.images[0].data) : '';
+          div.innerHTML = `
+            <h4>${p.name}</h4>
+            <p>${utils.trunc(p.description, 160)}</p>
+            <div class="project-actions">
+              <button class="btn-success" onclick="ui.editProject(${JSON.stringify(p.id)})">✏️ Редактировать</button>
+              <button class="btn-danger" onclick="projectManager.delete(${JSON.stringify(p.id)})">🗑️ Удалить</button>
+            </div>`;
+          list.appendChild(div); 
+        }); 
+      },
+      editProject(id){
+        const project = projectManager.get(id); if(!project) return;
+        state.editingProjectId = id;
+        document.getElementById('editingId').value = id;
+        document.getElementById('projectName').value = project.name;
+        document.getElementById('projectDescription').value = project.description;
+        document.getElementById('projectPriceInput').value = project.price;
+        // загрузить текущие изображения в форму
+        state.uploadedFiles = (project.images||[]).map((img, i)=>({ id: `existing_${i}`, data: typeof img==='string'? img : img.data, name: typeof img==='string'? `image_${i}.jpg` : img.name }));
+        ui.updateUploadedImages();
+        switchTab('add');
+        document.getElementById('saveBtn').textContent = '💾 Обновить проект';
+        document.getElementById('cancelBtn').style.display = 'inline-block';
+        utils.msg('Режим редактирования');
+      },
+      updateUploadedImages(){ 
+        const c = document.getElementById('uploadedImages'); if(!c) return; c.innerHTML=''; 
+        state.uploadedFiles.forEach((f,i)=>{ 
+          const d=document.createElement('div'); d.className='uploaded-image';
+          d.innerHTML=`
+            <img src="${f.data}" alt="${f.name}" />
+            <button class="remove-image" onclick="ui.removeUploadedImage(${i})">×</button>`; 
+          c.appendChild(d); 
+        }); 
+      },
+      removeUploadedImage(i){ state.uploadedFiles.splice(i,1); ui.updateUploadedImages(); }
+    };
+
+    // Навигация изображений в модалке
+    function prevImage(){ if(state.currentProject && state.currentImageIndex>0){ state.currentImageIndex--; ui.updateModalImage(); ui.updateImageNavigation(); } }
+    function nextImage(){ const p=state.currentProject; if(p && state.currentImageIndex < (p.images?.length||1)-1){ state.currentImageIndex++; ui.updateModalImage(); ui.updateImageNavigation(); } }
+    function closeProject(){ ui.closeProject(); }
+
+    // Плавная навигация и реакция шапки
+    function initNavigation(){
+      window.addEventListener('scroll', ()=> { 
+        if (window.scrollY > 80) document.getElementById('navbar').classList.add('scrolled'); 
+        else document.getElementById('navbar').classList.remove('scrolled'); 
+      });
+      document.querySelectorAll('a[href^="#"]').forEach(a=>{ 
+        a.addEventListener('click',e=>{ 
+          e.preventDefault(); 
+          const t=document.querySelector(a.getAttribute('href')); 
+          if(!t) return; 
+          const top=t.getBoundingClientRect().top + window.scrollY - 80; 
+          window.scrollTo({ top, behavior: 'smooth' }); 
+        }); 
+      });
+    }
+
+    // Авторизация (поддержка схем из (3) и (2))
+    async function openAuth(){ const m=document.getElementById('authModal'); m.style.display='flex'; document.getElementById('adminPassword').focus(); }
+    function closeAuth(){ document.getElementById('authModal').style.display='none'; }
+
+    async function checkPassword(){
+      const input = document.getElementById('adminPassword');
+      const val = input.value || '';
+      if (CONFIG.ADMIN_PASSWORD) {
+        // как в (3): фиксированный пароль
+        if (val === CONFIG.ADMIN_PASSWORD) {
+          state.isAdminAuthenticated = true; closeAuth(); openAdmin(); utils.msg('Добро пожаловать в админ-панель');
+        } else { utils.msg('Неверный пароль', 'error'); }
+        input.value='';
+        return;
+      }
+      // как в (2): первый ввод задаёт пароль (хранится хеш)
+      const saved = localStorage.getItem(CONFIG.ADMIN_HASH_KEY); 
+      const h = await utils.sha(val);
+      if (!saved){ 
+        localStorage.setItem(CONFIG.ADMIN_HASH_KEY, h); 
+        state.isAdminAuthenticated = true; closeAuth(); openAdmin(); utils.msg('Пароль установлен. Добро пожаловать!'); 
+      } else if (saved === h){ 
+        state.isAdminAuthenticated = true; closeAuth(); openAdmin(); utils.msg('Добро пожаловать в админ-панель'); 
+      } else { utils.msg('Неверный пароль', 'error'); }
+      input.value = '';
+    }
+
+    function openAdmin(){ if (!state.isAdminAuthenticated) return openAuth(); document.getElementById('adminPanel').classList.add('active'); ui.loadProjectList(); }
+    function closeAdmin(){ document.getElementById('adminPanel').classList.remove('active'); cancelEdit(); }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      if(tab === 'add') { document.querySelectorAll('.admin-tab')[0].classList.add('active'); document.getElementById('addTab').classList.add('active'); }
+      else { document.querySelectorAll('.admin-tab')[1].classList.add('active'); document.getElementById('manageTab').classList.add('active'); ui.loadProjectList(); }
+    }
+
+    async function saveProject(e){ 
+      e.preventDefault(); 
+      try{ 
+        const data = { 
+          name: document.getElementById('projectName').value, 
+          description: document.getElementById('projectDescription').value, 
+          price: document.getElementById('projectPriceInput').value, 
+          images: state.uploadedFiles.map(f=>f.data) 
+        };
+        const id = document.getElementById('editingId').value; 
+        if (id) await projectManager.update(parseInt(id,10), data); 
+        else await projectManager.create(data); 
+        cancelEdit(); 
+      } catch(err){ utils.msg('Ошибка сохранения: ' + err.message, 'error'); } 
+    }
+
+    function cancelEdit(){ 
+      state.editingProjectId=null; 
+      state.uploadedFiles=[]; 
+      const form=document.getElementById('projectForm'); if(form) form.reset(); 
+      document.getElementById('editingId').value=''; 
+      const saveBtn=document.getElementById('saveBtn'); if(saveBtn) saveBtn.textContent='✅ Сохранить проект'; 
+      const cancelBtn=document.getElementById('cancelBtn'); if(cancelBtn) cancelBtn.style.display='none'; 
+      ui.updateUploadedImages(); 
+    }
+
+    function initDragAndDrop(){ 
+      const area = document.getElementById('imageUploadArea'); 
+      const input = document.getElementById('imageInput'); 
+      if(!area||!input) return;
+      area.addEventListener('click', ()=> input.click());
+      input.addEventListener('change', async e=>{ const files=[...e.target.files]; await handleFiles(files); input.value=''; });
+      ['dragenter','dragover','dragleave','drop'].forEach(n=>{ area.addEventListener(n, e=>{ e.preventDefault(); e.stopPropagation(); }); });
+      ['dragenter','dragover'].forEach(n=> area.addEventListener(n, ()=> area.classList.add('dragover')));
+      ['dragleave','drop'].forEach(n=> area.addEventListener(n, ()=> area.classList.remove('dragover')));
+      area.addEventListener('drop', async e=>{ const files=[...e.dataTransfer.files]; await handleFiles(files); });
+      async function handleFiles(files){ 
+        if(state.uploadedFiles.length + files.length > CONFIG.MAX_IMAGES){ utils.msg(`Максимум ${CONFIG.MAX_IMAGES} изображений`, 'error'); return; } 
+        const processed = await imageHandler.process(files); 
+        state.uploadedFiles.push(...processed); 
+        ui.updateUploadedImages(); 
+        if(processed.length) utils.msg(`Загружено ${processed.length} изображ.`); 
+      }
+    }
+
+    // Открытие auth по ?admin=true — из (3)
+    function checkAdminAccess(){ const urlParams = new URLSearchParams(window.location.search); if (urlParams.get('admin') === 'true') { openAuth(); } }
+
+    // Инициализация
+    document.addEventListener('DOMContentLoaded', ()=>{
+      storage.load(); 
+      ui.loadProjects(); 
+      initNavigation(); 
+      initDragAndDrop();
+      checkAdminAccess();
+
+      // Шорткат как в (2)
+      document.addEventListener('keydown', e=>{
+        if(e.key==='Escape'){ ui.closeProject(); closeAuth(); closeAdmin(); }
+        if(e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='a'){ e.preventDefault(); openAdmin(); }
+      });
+
+      utils.msg('🚀 Сайт загружен');
+    });
+
+    // Экспорт в глобальную область
+    window.prevImage = prevImage;
+    window.nextImage = nextImage;
+    window.closeProject = closeProject;
+    window.checkPassword = checkPassword;
+    window.closeAuth = closeAuth;
+    window.openAdmin = openAdmin;
+    window.closeAdmin = closeAdmin;
+    window.switchTab = switchTab;
+    window.cancelEdit = cancelEdit;
+    window.saveProject = saveProject;
+    window.ui = ui;
+    window.projectManager = projectManager;
+  </script>
+</body>
+</html>
