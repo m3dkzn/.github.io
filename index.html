@@ -805,18 +805,18 @@
       if (!state.supabaseKey) return;
       const parts = state.supabaseKey.split('.');
       if (parts.length < 2) {
-        throw new Error('Supabase ключ некорректен. Проверь значение во вкладке "Настройки".');
+        console.warn('Supabase ключ некорректен — проверка роли пропущена.');
+        return;
       }
       const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
       const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
-      let payload;
       try {
-        payload = JSON.parse(atob(padded));
-      } catch (_) {
-        throw new Error('Supabase ключ не удалось декодировать. Убедись, что вставлен полный JWT.');
-      }
-      if (payload?.role !== 'service_role') {
-        throw new Error('Для изменений используется ключ без роли service_role. Включи policies для anon или укажи service-role ключ.');
+        const payload = JSON.parse(atob(padded));
+        if (payload?.role !== 'service_role') {
+          console.warn('Используется ключ без роли service_role. Если RLS включён, операции могут быть заблокированы.');
+        }
+      } catch (error) {
+        console.warn('Supabase JWT parse error — проверка роли пропущена.', error);
       }
     }
 
