@@ -824,12 +824,16 @@
           throw new Error("Таблицы Supabase не найдены. Выполни SQL из инструкции и повтори подключение.");
         }
 
-        const { data: projects, error: projectsError } = await state.supabase
-          .from('projects')
-          .select('id, name, description, price, sort_order, project_images(id, url, storage_path, sort_order)')
-          .order('sort_order', { ascending: true })
-          .order('sort_order', { foreignTable: 'project_images', ascending: true });
-        if (projectsError) throw projectsError;
+        const projectsResponse = await fetch(`${state.supabaseUrl}/rest/v1/projects?select=id,name,description,price,sort_order,project_images(id,url,storage_path,sort_order)&order=sort_order.asc&project_images.order=sort_order.asc`, {
+          headers: {
+            'apikey': state.supabaseKey,
+            'Authorization': `Bearer ${state.supabaseKey}`
+          }
+        });
+        if (!projectsResponse.ok) {
+          throw new Error(`Supabase REST ${projectsResponse.status}`);
+        }
+        const projects = await projectsResponse.json();
         const normalizedProjects = (projects || []).map(p => ({
           id: p.id,
           name: p.name,
@@ -844,11 +848,16 @@
           })).sort((a,b)=> (a.sort_order??0) - (b.sort_order??0))
         }));
 
-        const { data: prices, error: priceError } = await state.supabase
-          .from('price_items')
-          .select('id, title, description, price, unit, sort_order')
-          .order('sort_order', { ascending: true });
-        if (priceError) throw priceError;
+        const priceResponse = await fetch(`${state.supabaseUrl}/rest/v1/price_items?select=id,title,description,price,unit,sort_order&order=sort_order.asc`, {
+          headers: {
+            'apikey': state.supabaseKey,
+            'Authorization': `Bearer ${state.supabaseKey}`
+          }
+        });
+        if (!priceResponse.ok) {
+          throw new Error(`Supabase REST ${priceResponse.status}`);
+        }
+        const prices = await priceResponse.json();
 
         state.projects = normalizedProjects;
         state.priceList = (prices || []).map(item => ({
