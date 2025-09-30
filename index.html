@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Print Studio | Портфолио</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+  <script>
+    window.SUPABASE_PUBLIC_URL = 'https://qpctnhjxuwctslgzkvqy.supabase.co';
+    window.SUPABASE_PUBLIC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwY3RuaGp4dXdjdHNsZ3prdnF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMjg5MDcsImV4cCI6MjA3NDgwNDkwN30.PRr3uDQxeEtX1MiIBkrLqlEO_GUgFKgVfanF0Bef0t0';
+    window.SUPABASE_PUBLIC_BUCKET = 'project-media';
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     :root {
@@ -779,9 +784,9 @@
     }
 
     function initSupabaseSettings(){
-      const storedUrl = localStorage.getItem(CONFIG.SUPABASE_URL_KEY) || '';
-      const storedKey = localStorage.getItem(CONFIG.SUPABASE_KEY_KEY) || '';
-      const storedBucket = localStorage.getItem(CONFIG.SUPABASE_BUCKET_KEY) || CONFIG.DEFAULT_BUCKET;
+      const storedUrl = localStorage.getItem(CONFIG.SUPABASE_URL_KEY) || window.SUPABASE_PUBLIC_URL || '';
+      const storedKey = localStorage.getItem(CONFIG.SUPABASE_KEY_KEY) || window.SUPABASE_PUBLIC_KEY || '';
+      const storedBucket = localStorage.getItem(CONFIG.SUPABASE_BUCKET_KEY) || window.SUPABASE_PUBLIC_BUCKET || CONFIG.DEFAULT_BUCKET;
       state.supabaseUrl = storedUrl;
       state.supabaseKey = storedKey;
       state.supabaseBucket = storedBucket;
@@ -791,8 +796,24 @@
       if (urlInput) urlInput.value = storedUrl;
       if (keyInput) keyInput.value = storedKey;
       if (bucketInput) bucketInput.value = storedBucket;
-      if (!storedUrl || !storedKey) {
+      if (!state.supabaseUrl || !state.supabaseKey) {
         setSyncStatus('Supabase: ожидание конфигурации', 'pending');
+      }
+    }
+
+    function enforceServiceRole(){
+      if (!state.supabaseKey || !state.supabaseKey.toLowerCase().startsWith('ey')) return;
+      // Supabase service-role ключ содержит "service_role" в payload; если ключ anon, операции записи могут упасть.
+      try {
+        const payload = JSON.parse(atob(state.supabaseKey.split('.')[1]));
+        if (payload?.role !== 'service_role') {
+          throw new Error('У Supabase включена RLS. Используй service-role ключ или настрой policies.');
+        }
+      } catch (err) {
+        if (err.message.includes('service-role')) {
+          throw err;
+        }
+        throw new Error('Supabase ключ не похож на service-role. Проверь настройки RLS или измени правило доступа.');
       }
     }
 
@@ -804,6 +825,14 @@
       setSyncStatus('Supabase: загружаем данные…', 'pending');
       state.isSyncing = true;
       try {
+        const { error: projectsMetaError } = await state.supabase
+          .from('projects')
+          .select('id', { count: 'exact', head: true })
+          .limit(1);
+        if (projectsMetaError && projectsMetaError.code === 'PGRST103') {
+          throw new Error("Таблицы Supabase не найдены. Выполни SQL из инструкции и повтори подключение.");
+        }
+
         const { data: projects, error: projectsError } = await state.supabase
           .from('projects')
           .select('id, name, description, price, sort_order, project_images(id, url, storage_path, sort_order)')
@@ -888,6 +917,7 @@
     const priceManager = {
       async create(data){
         ensureSupabase();
+        enforceServiceRole();
         const payload = {
           title: data.title,
           description: data.description,
@@ -902,6 +932,7 @@
       },
       async update(id, data){
         ensureSupabase();
+        enforceServiceRole();
         const payload = {
           title: data.title,
           description: data.description,
@@ -915,6 +946,7 @@
       },
       async delete(id){
         ensureSupabase();
+        enforceServiceRole();
         if (!confirm('Удалить эту услугу из прайса?')) return;
         const { error } = await state.supabase.from('price_items').delete().eq('id', id);
         if (error) throw error;
@@ -923,6 +955,7 @@
       },
       async move(id, direction){
         ensureSupabase();
+        enforceServiceRole();
         const index = state.priceList.findIndex(item => item.id === id);
         if (index < 0) return;
         const target = index + direction;
@@ -1002,6 +1035,7 @@
     const projectManager = {
       async create(data){
         ensureSupabase();
+        enforceServiceRole();
         const payload = {
           name: data.name,
           description: data.description,
@@ -1017,6 +1051,7 @@
       },
       async update(id, data){
         ensureSupabase();
+        enforceServiceRole();
         const payload = {
           name: data.name,
           description: data.description,
@@ -1030,6 +1065,7 @@
       },
       async delete(id){
         ensureSupabase();
+        enforceServiceRole();
         if (!confirm('Удалить проект?')) return;
         const project = state.projects.find(p => p.id === id);
         const paths = (project?.images || []).map(img => img.storagePath).filter(Boolean);
