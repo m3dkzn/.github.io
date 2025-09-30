@@ -834,14 +834,23 @@
           });
           if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
-            throw new Error(errorBody.message || `GitHub ответ ${response.status}`);
+            const errorMessage = errorBody.message || `GitHub ответ ${response.status}`;
+            if (response.status === 409 || /sha/i.test(errorMessage) || /does not match/i.test(errorMessage)) {
+              state.remoteSha = null;
+              setSyncStatus('GitHub: данные изменились в репозитории. Нажмите «Загрузить из GitHub» и повторите.', 'error');
+              throw new Error('GitHub: данные изменились в репозитории. Обновите и повторите сохранение.');
+            }
+            throw new Error(errorMessage);
           }
           const result = await response.json();
           state.remoteSha = result.content?.sha || state.remoteSha;
           utils.msg('Изменения опубликованы на GitHub');
           setSyncStatus('GitHub: изменения опубликованы', 'ok');
         } catch (err) {
-          setSyncStatus('GitHub: ' + err.message, 'error');
+          const message = typeof err?.message === 'string' && err.message.trim().startsWith('GitHub:')
+            ? err.message.trim()
+            : `GitHub: ${err?.message || 'неизвестная ошибка'}`;
+          setSyncStatus(message, 'error');
           throw err;
         } finally {
           state.isSyncing = false;
