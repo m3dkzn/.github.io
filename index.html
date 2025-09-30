@@ -268,6 +268,13 @@
     .project-item h4 { color: var(--primary); margin-bottom: 10px; font-size: 1.2rem; }
     .project-item p { color: var(--text-muted); margin-bottom: 15px; line-height: 1.5; }
     .project-actions { display: flex; gap: 10px; margin-top: 15px; }
+    .admin-settings { margin: 20px 0 30px; padding: 20px; border: 1px dashed var(--glass-border); border-radius: 14px; background: rgba(23, 23, 27, 0.6); }
+    .admin-settings h3 { margin: 0 0 12px; color: var(--primary); font-size: 1.2rem; }
+    .admin-settings p { margin: 0 0 12px; color: var(--text-muted); font-size: 0.9rem; }
+    .settings-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn-secondary { background: rgba(255, 255, 255, 0.12); color: var(--text); padding: 10px 18px; font-size: 14px; border: 1px solid var(--glass-border); border-radius: 10px; cursor: pointer; transition: all 0.3s ease; }
+    .btn-secondary:hover { background: rgba(88, 200, 107, 0.2); border-color: var(--primary); }
+    .form-hint { margin-top: 6px; color: var(--gray); font-size: 0.85rem; }
 
     /* Контакты */
     .contacts-section { text-align: center; margin: 20px 0 80px; }
@@ -325,7 +332,7 @@
         <h2 style="margin:0;color:var(--primary)"></h2>
       </div>
       <div class="glass-card">
-        <h2 class="biography-title">ОБО МНЕ</h2>
+        <h2 class="biography-title"></h2>
         <p class="biography-text">Привeтствую, увaжaемые гости данного портфолио. Mеня зoвут Миxaил. Пpeдocтaвляю уcлуги 3Д-пeчaти и вcе сопутcтвующиe услуги в cфеpe aддитивныx тexнoлoгий пo горoду Казaнь.</p>
         <p class="biography-text">На данном сайте представлены завершённые проекты, в которых я выступал в качестве исполнителя.</p>
       </div>
@@ -424,6 +431,23 @@
         <button class="admin-tab active" onclick="switchTab('add')">Добавить</button>
         <button class="admin-tab" onclick="switchTab('manage')">Управление</button>
       </div>
+      <div class="admin-settings">
+        <h3>🌐 GitHub синхронизация</h3>
+        <p>Данные проектов берутся из файла <code>data/projects.json</code> репозитория. Укажите токен, чтобы публикации были доступны всем.</p>
+        <div class="form-group">
+          <label class="form-label" for="githubRepo">📁 Репозиторий</label>
+          <input type="text" class="form-input" id="githubRepo" placeholder="owner/repo">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="githubToken">🔑 Personal Access Token</label>
+          <input type="password" class="form-input" id="githubToken" placeholder="ghp_…" autocomplete="off">
+          <p class="form-hint">Токен хранится только в этом браузере. Нужны права <code>repo</code> или <code>public_repo</code>.</p>
+        </div>
+        <div class="settings-actions">
+          <button type="button" class="btn btn-secondary" onclick="storage.syncFromGitHub()">⬇️ Загрузить из GitHub</button>
+          <button type="button" class="btn btn-secondary" onclick="storage.clearToken()">🧹 Очистить токен</button>
+        </div>
+      </div>
       
       <div id="addTab" class="tab-content active">
         <form onsubmit="saveProject(event)" id="projectForm">
@@ -467,10 +491,28 @@
       MAX_IMAGES: 10,
       MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
       ADMIN_HASH_KEY: '3d_admin_hash',
-      ADMIN_PASSWORD: '3DStudio_SuperSecure_2025!@#$' // можно указать, например: '3DStudio_SuperSecure_2025!@#$'
+      ADMIN_PASSWORD: '3DStudio_SuperSecure_2025!@#$',
+      GITHUB_OWNER: 'm3dkzn',
+      GITHUB_REPO: 'm3dkzn.github.io',
+      GITHUB_BRANCH: 'main',
+      GITHUB_DATA_PATH: 'data/projects.json',
+      TOKEN_STORAGE_KEY: '3d_studio_github_token',
+      REPO_STORAGE_KEY: '3d_studio_repo'
     };
 
-    const state = { projects: [], currentProject: null, currentImageIndex: 0, isAdminAuthenticated: false, editingProjectId: null, uploadedFiles: [] };
+    const state = {
+      projects: [],
+      currentProject: null,
+      currentImageIndex: 0,
+      isAdminAuthenticated: false,
+      editingProjectId: null,
+      uploadedFiles: [],
+      githubToken: '',
+      repoOwner: CONFIG.GITHUB_OWNER,
+      repoName: CONFIG.GITHUB_REPO,
+      remoteSha: null,
+      isSyncing: false
+    };
 
     // Демо-данные
     const DEFAULT_PROJECTS = [
@@ -496,6 +538,17 @@
         const hash = await crypto.subtle.digest('SHA-256', enc);
         return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
       },
+      decodeBase64(str) {
+        try {
+          if (window.TextDecoder) {
+            return new TextDecoder().decode(Uint8Array.from(atob(str), c => c.charCodeAt(0)));
+          }
+        } catch (_) {}
+        return decodeURIComponent(Array.from(atob(str)).map(c => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''));
+      },
+      encodeBase64(str) {
+        return btoa(unescape(encodeURIComponent(str)));
+      },
       validateImage(file) {
         if (!file.type.startsWith('image/')) throw new Error('Файл должен быть изображением');
         if (file.size > CONFIG.MAX_IMAGE_SIZE) throw new Error('Размер не должен превышать 5 MB');
@@ -505,11 +558,179 @@
 
     // Хранилище
     const storage = {
-      save() { try { localStorage.setItem('3d_studio_projects', JSON.stringify(state.projects)); } catch(_){} },
-      load() {
-        try { const s = localStorage.getItem('3d_studio_projects'); state.projects = s ? JSON.parse(s) : DEFAULT_PROJECTS; } catch(_) { state.projects = DEFAULT_PROJECTS; }
+      async load() {
+        try {
+          await this.loadFromGitHub();
+        } catch (err) {
+          console.warn('GitHub load failed', err);
+          if (!this.loadFromLocalCache()) {
+            state.projects = DEFAULT_PROJECTS;
+          }
+        }
+      },
+      loadFromLocalCache() {
+        try {
+          const cached = localStorage.getItem('3d_studio_projects_cache');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed.projects)) {
+              state.projects = parsed.projects;
+              state.remoteSha = parsed.sha || null;
+              return true;
+            }
+          }
+          const legacy = localStorage.getItem('3d_studio_projects');
+          if (legacy) {
+            const legacyData = JSON.parse(legacy);
+            if (Array.isArray(legacyData)) {
+              state.projects = legacyData;
+              return true;
+            }
+          }
+        } catch (err) {
+          console.warn('Local cache error', err);
+        }
+        return false;
+      },
+      saveToLocalCache() {
+        try {
+          localStorage.setItem('3d_studio_projects_cache', JSON.stringify({ projects: state.projects, sha: state.remoteSha, updatedAt: Date.now() }));
+        } catch (_) {}
+      },
+      async loadFromGitHub() {
+        const apiUrl = `https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}?ref=${CONFIG.GITHUB_BRANCH}`;
+        const response = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' }, cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`GitHub ответ ${response.status}`);
+        }
+        const data = await response.json();
+        if (!data.content) throw new Error('Пустой ответ GitHub');
+        const decoded = utils.decodeBase64(data.content);
+        const list = JSON.parse(decoded);
+        if (!Array.isArray(list)) throw new Error('Неверный формат файла');
+        state.projects = list;
+        state.remoteSha = data.sha || null;
+        this.saveToLocalCache();
+      },
+      async save() {
+        try {
+          await this.saveToGitHub();
+        } finally {
+          this.saveToLocalCache();
+        }
+      },
+      async saveToGitHub() {
+        if (!state.githubToken) {
+          throw new Error('GitHub токен не указан. Укажите его в настройках синхронизации.');
+        }
+        if (state.isSyncing) {
+          throw new Error('Дождитесь завершения синхронизации с GitHub.');
+        }
+        state.isSyncing = true;
+        try {
+          const apiUrl = `https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}`;
+          const payload = {
+            message: 'Обновление портфолио с сайта',
+            content: utils.encodeBase64(JSON.stringify(state.projects, null, 2)),
+            branch: CONFIG.GITHUB_BRANCH
+          };
+          if (state.remoteSha) payload.sha = state.remoteSha;
+          const response = await fetch(apiUrl, {
+            method: 'PUT',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${state.githubToken}`
+            },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.message || `GitHub ответ ${response.status}`);
+          }
+          const result = await response.json();
+          state.remoteSha = result.content?.sha || state.remoteSha;
+          utils.msg('Изменения опубликованы на GitHub');
+        } catch (err) {
+          throw err;
+        } finally {
+          state.isSyncing = false;
+        }
+      },
+      async syncFromGitHub() {
+        if (state.isSyncing) {
+          utils.msg('Синхронизация уже выполняется, подождите…', 'error');
+          return;
+        }
+        state.isSyncing = true;
+        utils.msg('Обновление данных из GitHub…');
+        try {
+          await this.loadFromGitHub();
+          ui.loadProjects();
+          ui.loadProjectList();
+          utils.msg('Данные синхронизированы с GitHub');
+        } catch (err) {
+          utils.msg('Ошибка загрузки GitHub: ' + err.message, 'error');
+        } finally {
+          state.isSyncing = false;
+        }
+      },
+      clearToken() {
+        state.githubToken = '';
+        sessionStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
+        localStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
+        const input = document.getElementById('githubToken');
+        if (input) input.value = '';
+        utils.msg('GitHub токен удалён');
       }
     };
+
+    function initSyncSettings(){
+      const repoInput = document.getElementById('githubRepo');
+      const tokenInput = document.getElementById('githubToken');
+      const storedRepo = localStorage.getItem(CONFIG.REPO_STORAGE_KEY);
+      if (storedRepo) {
+        const applied = setRepo(storedRepo, true);
+        if (repoInput) repoInput.value = applied ? storedRepo : `${state.repoOwner}/${state.repoName}`;
+      } else if (repoInput) {
+        repoInput.value = `${state.repoOwner}/${state.repoName}`;
+      }
+
+      if (repoInput) {
+        repoInput.addEventListener('change', () => setRepo(repoInput.value));
+      }
+
+      const storedToken = sessionStorage.getItem(CONFIG.TOKEN_STORAGE_KEY) || localStorage.getItem(CONFIG.TOKEN_STORAGE_KEY) || '';
+      if (storedToken) {
+        state.githubToken = storedToken;
+      }
+      if (tokenInput) {
+        tokenInput.value = storedToken;
+        tokenInput.addEventListener('input', (e) => {
+          state.githubToken = e.target.value.trim();
+          if (state.githubToken) {
+            sessionStorage.setItem(CONFIG.TOKEN_STORAGE_KEY, state.githubToken);
+            localStorage.setItem(CONFIG.TOKEN_STORAGE_KEY, state.githubToken);
+          } else {
+            sessionStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
+            localStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
+          }
+        });
+      }
+
+      function setRepo(value, silent = false){
+        const parts = value.split('/').map(p => p.trim()).filter(Boolean);
+        if (parts.length === 2) {
+          [state.repoOwner, state.repoName] = parts;
+          localStorage.setItem(CONFIG.REPO_STORAGE_KEY, `${state.repoOwner}/${state.repoName}`);
+          return true;
+        } else if (!silent) {
+          utils.msg('Используйте формат owner/repo для GitHub', 'error');
+          if (repoInput) repoInput.value = `${state.repoOwner}/${state.repoName}`;
+        }
+        return false;
+      }
+    }
 
     // Работа с изображениями
     const imageHandler = {
@@ -521,16 +742,44 @@
     const projectManager = {
       async create(d){ 
         const p = { id: utils.id(), name: d.name, description: d.description, price: parseInt(d.price,10)||0, images: d.images||[], createdAt: new Date().toISOString() }; 
-        state.projects.push(p); storage.save(); ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект создан'); return p; 
+        state.projects.push(p); 
+        try {
+          await storage.save();
+          ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект создан');
+          return p;
+        } catch (err) {
+          state.projects.pop();
+          storage.saveToLocalCache();
+          throw err;
+        }
       },
       async update(id, d){ 
         const i = state.projects.findIndex(p=>p.id===id); if(i<0) throw new Error('Проект не найден'); 
+        const prev = { ...state.projects[i] };
         state.projects[i] = { ...state.projects[i], name:d.name, description:d.description, price: parseInt(d.price,10)||0, images: d.images?.length? d.images : state.projects[i].images, updatedAt: new Date().toISOString() }; 
-        storage.save(); ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект обновлён'); return state.projects[i]; 
+        try {
+          await storage.save();
+          ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект обновлён');
+          return state.projects[i];
+        } catch (err) {
+          state.projects[i] = prev;
+          storage.saveToLocalCache();
+          throw err;
+        }
       },
-      delete(id){ 
+      async delete(id){ 
         const i = state.projects.findIndex(p=>p.id===id); if(i<0) return; 
-        if(confirm('Удалить проект?')){ state.projects.splice(i,1); storage.save(); ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект удалён'); } 
+        if(confirm('Удалить проект?')){ 
+          const removed = state.projects.splice(i,1)?.[0];
+          try {
+            await storage.save();
+            ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект удалён');
+          } catch (err) {
+            if (removed) state.projects.splice(i, 0, removed);
+            storage.saveToLocalCache();
+            utils.msg('Ошибка удаления: ' + err.message, 'error');
+          }
+        }
       },
       get: (id) => state.projects.find(p=>p.id===id)
     };
@@ -736,11 +985,16 @@
     function checkAdminAccess(){ const urlParams = new URLSearchParams(window.location.search); if (urlParams.get('admin') === 'true') { openAuth(); } }
 
     // Инициализация
-    document.addEventListener('DOMContentLoaded', ()=>{
-      storage.load(); 
-      ui.loadProjects(); 
-      initNavigation(); 
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      initNavigation();
       initDragAndDrop();
+      initSyncSettings();
+      try {
+        await storage.load();
+      } catch (err) {
+        utils.msg('Не удалось загрузить данные из GitHub: ' + err.message, 'error');
+      }
+      ui.loadProjects();
       checkAdminAccess();
 
       // Шорткат как в (2)
