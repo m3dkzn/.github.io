@@ -808,8 +808,7 @@
           const decoded = utils.decodeBase64(data.content);
           payload = JSON.parse(decoded);
         } else if (data.download_url) {
-          const rawHeaders = (useAuthForRead && state.githubToken) ? { 'Authorization': `Bearer ${state.githubToken}` } : {};
-          const rawResponse = await fetch(buildApiUrl(data.download_url), { headers: rawHeaders, cache: 'no-store' }).catch(() => {
+          const rawResponse = await fetch(buildApiUrl(data.download_url), { cache: 'no-store' }).catch(() => {
             throw new Error('Не удалось скачать данные из GitHub (network).');
           });
           if (!rawResponse.ok) throw new Error(`GitHub raw ${rawResponse.status}`);
