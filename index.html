@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <script>window.GITHUB_PROXY = window.GITHUB_PROXY || "";</script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Print Studio | Портфолио</title>
@@ -620,7 +621,8 @@
       GITHUB_BRANCH: 'main',
       GITHUB_DATA_PATH: 'data/projects.json',
       TOKEN_STORAGE_KEY: '3d_studio_github_token',
-      REPO_STORAGE_KEY: '3d_studio_repo'
+      REPO_STORAGE_KEY: '3d_studio_repo',
+      REQUIRE_AUTH_FOR_READ: false
     };
 
     const state = {
@@ -713,6 +715,14 @@
       }
     };
 
+
+    function buildApiUrl(url){
+      if (window.GITHUB_PROXY) {
+        return window.GITHUB_PROXY + encodeURIComponent(url);
+      }
+      return url;
+    }
+
     function applyPortfolioData(payload) {
       if (Array.isArray(payload)) {
         state.projects = dataHelpers.cloneProjects(payload);
@@ -782,10 +792,13 @@
         } catch (_) {}
       },
       async loadFromGitHub() {
-        const apiUrl = `https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}?ref=${CONFIG.GITHUB_BRANCH}`;
+        const apiUrl = buildApiUrl(`https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}?ref=${CONFIG.GITHUB_BRANCH}`);
         const headers = { 'Accept': 'application/vnd.github+json' };
-        if (state.githubToken) headers['Authorization'] = `Bearer ${state.githubToken}`;
-        const response = await fetch(apiUrl, { headers, cache: 'no-store' });
+        const useAuthForRead = CONFIG.REQUIRE_AUTH_FOR_READ === true;
+        if (useAuthForRead && state.githubToken) headers['Authorization'] = `Bearer ${state.githubToken}`;
+        const response = await fetch(apiUrl, { headers, cache: 'no-store' }).catch(() => {
+          throw new Error('Не удалось обратиться к GitHub (network). Проверьте подключение или попробуйте позже.');
+        });
         if (!response.ok) {
           throw new Error(`GitHub ответ ${response.status}`);
         }
@@ -795,8 +808,10 @@
           const decoded = utils.decodeBase64(data.content);
           payload = JSON.parse(decoded);
         } else if (data.download_url) {
-          const rawHeaders = state.githubToken ? { 'Authorization': `Bearer ${state.githubToken}` } : {};
-          const rawResponse = await fetch(data.download_url, { headers: rawHeaders, cache: 'no-store' });
+          const rawHeaders = (useAuthForRead && state.githubToken) ? { 'Authorization': `Bearer ${state.githubToken}` } : {};
+          const rawResponse = await fetch(buildApiUrl(data.download_url), { headers: rawHeaders, cache: 'no-store' }).catch(() => {
+            throw new Error('Не удалось скачать данные из GitHub (network).');
+          });
           if (!rawResponse.ok) throw new Error(`GitHub raw ${rawResponse.status}`);
           const rawText = await rawResponse.text();
           payload = JSON.parse(rawText);
@@ -826,7 +841,7 @@
         state.isSyncing = true;
         setSyncStatus('GitHub: сохраняем изменения…', 'pending');
         try {
-          const apiUrl = `https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}`;
+          const apiUrl = buildApiUrl(`https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}`);
           const payload = {
             message: 'Обновление портфолио с сайта',
             content: utils.encodeBase64(JSON.stringify({
