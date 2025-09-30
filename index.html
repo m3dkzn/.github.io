@@ -5,6 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Print Studio | Портфолио</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     :root {
@@ -586,22 +587,26 @@
 
       <div class="admin-pane" id="settingsPane">
         <div class="admin-settings">
-          <h3>🌐 GitHub синхронизация</h3>
-          <p>Данные сайта берутся из <code>data/projects.json</code>. Укажите репозиторий и токен, чтобы публиковать изменения сразу для всех.</p>
+          <h3>🌐 Supabase подключение</h3>
+          <p>Портфолио и прайс хранятся в Supabase. Укажите URL проекта, ключ API и имя бакета для изображений.</p>
           <div class="form-group">
-            <label class="form-label" for="githubRepo">📁 Репозиторий</label>
-            <input type="text" class="form-input" id="githubRepo" placeholder="owner/repo">
+            <label class="form-label" for="supabaseUrl">🔗 Supabase URL</label>
+            <input type="text" class="form-input" id="supabaseUrl" placeholder="https://xxxx.supabase.co">
           </div>
           <div class="form-group">
-            <label class="form-label" for="githubToken">🔑 Personal Access Token</label>
-            <input type="password" class="form-input" id="githubToken" placeholder="ghp_…" autocomplete="off">
-            <p class="form-hint">Токен хранится только в этом браузере. Нужны права <code>repo</code> или <code>public_repo</code>.</p>
+            <label class="form-label" for="supabaseKey">🪪 API ключ (anon/service)</label>
+            <input type="password" class="form-input" id="supabaseKey" placeholder="SUPAbaseKey" autocomplete="off">
+            <p class="form-hint">Хранится локально в браузере. Для записи нужен ключ с правами на INSERT/UPDATE/DELETE.</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supabaseBucket">🗂️ Бакет для изображений</label>
+            <input type="text" class="form-input" id="supabaseBucket" placeholder="project-media">
           </div>
           <div class="settings-actions">
-            <button type="button" class="btn btn-secondary" onclick="storage.syncFromGitHub()">⬇️ Загрузить из GitHub</button>
-            <button type="button" class="btn btn-secondary" onclick="storage.clearToken()">🧹 Очистить токен</button>
+            <button type="button" class="btn btn-secondary" onclick="supabaseSync.reload()">⬇️ Подключиться и обновить</button>
+            <button type="button" class="btn btn-secondary" onclick="supabaseSync.clearCredentials()">🧹 Очистить ключ</button>
           </div>
-          <div class="sync-status" id="syncStatus" data-state="pending">GitHub: ожидание подключения</div>
+          <div class="sync-status" id="syncStatus" data-state="pending">Supabase: ожидание конфигурации</div>
         </div>
       </div>
     </div>
@@ -616,13 +621,10 @@
       MAX_IMAGE_SIZE: 5 * 1024 * 1024, // 5MB
       ADMIN_HASH_KEY: '3d_admin_hash',
       ADMIN_PASSWORD: '3DStudio_SuperSecure_2025!@#$',
-      GITHUB_OWNER: 'm3dkzn',
-      GITHUB_REPO: 'm3dkzn.github.io',
-      GITHUB_BRANCH: 'main',
-      GITHUB_DATA_PATH: 'data/projects.json',
-      TOKEN_STORAGE_KEY: '3d_studio_github_token',
-      REPO_STORAGE_KEY: '3d_studio_repo',
-      REQUIRE_AUTH_FOR_READ: true
+      SUPABASE_URL_KEY: 'm3d_supabase_url',
+      SUPABASE_KEY_KEY: 'm3d_supabase_key',
+      SUPABASE_BUCKET_KEY: 'm3d_supabase_bucket',
+      DEFAULT_BUCKET: 'project-media'
     };
 
     const state = {
@@ -634,10 +636,11 @@
       editingProjectId: null,
       editingPriceId: null,
       uploadedFiles: [],
-      githubToken: '',
-      repoOwner: CONFIG.GITHUB_OWNER,
-      repoName: CONFIG.GITHUB_REPO,
-      remoteSha: null,
+      deletedImages: [],
+      supabaseUrl: '',
+      supabaseKey: '',
+      supabaseBucket: '',
+      supabase: null,
       isSyncing: false
     };
 
@@ -699,416 +702,348 @@
       }
     };
 
-    const dataHelpers = {
-      cloneProjects(list) {
-        if (!Array.isArray(list)) return [];
-        return list.map(project => ({
-          ...project,
-          images: Array.isArray(project?.images)
-            ? project.images.map(img => (typeof img === 'string' ? img : { ...img }))
-            : []
-        }));
-      },
-      clonePriceList(list) {
-        if (!Array.isArray(list)) return [];
-        return list.map(item => ({ ...item }));
-      }
-    };
-
-
-    function buildApiUrl(url){
-      if (window.GITHUB_PROXY) {
-        return window.GITHUB_PROXY + encodeURIComponent(url);
-      }
-      return url;
-    }
-
-    function applyPortfolioData(payload) {
-      if (Array.isArray(payload)) {
-        state.projects = dataHelpers.cloneProjects(payload);
-        state.priceList = dataHelpers.clonePriceList(DEFAULT_PRICE_LIST);
-        if (!state.projects.length) {
-          state.projects = dataHelpers.cloneProjects(DEFAULT_PROJECTS);
-        }
-        return;
-      }
-      if (payload && typeof payload === 'object') {
-        state.projects = dataHelpers.cloneProjects(payload.projects);
-        state.priceList = dataHelpers.clonePriceList(payload.priceList?.length ? payload.priceList : DEFAULT_PRICE_LIST);
-        if (!state.priceList.length) {
-          state.priceList = dataHelpers.clonePriceList(DEFAULT_PRICE_LIST);
-        }
-        if (!state.projects.length) {
-          state.projects = dataHelpers.cloneProjects(DEFAULT_PROJECTS);
-        }
-        return;
-      }
-      state.projects = dataHelpers.cloneProjects(DEFAULT_PROJECTS);
-      state.priceList = dataHelpers.clonePriceList(DEFAULT_PRICE_LIST);
-    }
-
-    // Хранилище
-    const storage = {
-      async load() {
-        try {
-          await this.loadFromGitHub();
-        } catch (err) {
-          console.warn('GitHub load failed', err);
-          if (!this.loadFromLocalCache()) {
-            applyPortfolioData(DEFAULT_PROJECTS);
-          }
-          setSyncStatus('GitHub: не удалось загрузить данные, используется кеш', 'error');
-        }
-      },
-      loadFromLocalCache() {
-        try {
-          const cached = localStorage.getItem('3d_studio_projects_cache');
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            const payload = parsed?.data || parsed;
-            applyPortfolioData(payload);
-            state.remoteSha = parsed?.sha || null;
-            return true;
-          }
-          const legacy = localStorage.getItem('3d_studio_projects');
-          if (legacy) {
-            const legacyData = JSON.parse(legacy);
-            applyPortfolioData(legacyData);
-            return true;
-          }
-        } catch (err) {
-          console.warn('Local cache error', err);
-        }
-        return false;
-      },
-      saveToLocalCache() {
-        try {
-          localStorage.setItem('3d_studio_projects_cache', JSON.stringify({
-            projects: state.projects,
-            priceList: state.priceList,
-            sha: state.remoteSha,
-            updatedAt: Date.now()
-          }));
-        } catch (_) {}
-      },
-      async loadFromGitHub() {
-        const apiUrl = buildApiUrl(`https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}?ref=${CONFIG.GITHUB_BRANCH}`);
-        const headers = { 'Accept': 'application/vnd.github+json' };
-        const useAuthForRead = CONFIG.REQUIRE_AUTH_FOR_READ === true;
-        if (useAuthForRead && state.githubToken) headers['Authorization'] = `Bearer ${state.githubToken}`;
-        const response = await fetch(apiUrl, { headers, cache: 'no-store' }).catch(() => {
-          throw new Error('Не удалось обратиться к GitHub (network). Проверьте подключение или попробуйте позже.');
-        });
-        if (!response.ok) {
-          throw new Error(`GitHub ответ ${response.status}`);
-        }
-        const data = await response.json();
-        let payload;
-        if (data.content) {
-          const decoded = utils.decodeBase64(data.content);
-          payload = JSON.parse(decoded);
-        } else if (data.download_url) {
-          const rawResponse = await fetch(buildApiUrl(data.download_url), { cache: 'no-store' }).catch(() => {
-            throw new Error('Не удалось скачать данные из GitHub (network).');
-          });
-          if (!rawResponse.ok) throw new Error(`GitHub raw ${rawResponse.status}`);
-          const rawText = await rawResponse.text();
-          payload = JSON.parse(rawText);
-        } else {
-          throw new Error('Пустой ответ GitHub');
-        }
-        if (!payload) throw new Error('Не удалось прочитать данные GitHub');
-        applyPortfolioData(payload);
-        state.remoteSha = data.sha || null;
-        this.saveToLocalCache();
-        setSyncStatus('GitHub: данные обновлены', 'ok');
-      },
-      async save() {
-        try {
-          await this.saveToGitHub();
-        } finally {
-          this.saveToLocalCache();
-        }
-      },
-      async saveToGitHub() {
-        if (!state.githubToken) {
-          throw new Error('GitHub токен не указан. Укажите его в настройках синхронизации.');
-        }
-        if (state.isSyncing) {
-          throw new Error('Дождитесь завершения синхронизации с GitHub.');
-        }
-        state.isSyncing = true;
-        setSyncStatus('GitHub: сохраняем изменения…', 'pending');
-        try {
-          const apiUrl = buildApiUrl(`https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}`);
-          const payload = {
-            message: 'Обновление портфолио с сайта',
-            content: utils.encodeBase64(JSON.stringify({
-              projects: state.projects,
-              priceList: state.priceList
-            }, null, 2)),
-            branch: CONFIG.GITHUB_BRANCH
-          };
-          if (state.remoteSha) payload.sha = state.remoteSha;
-          const response = await fetch(apiUrl, {
-            method: 'PUT',
-            headers: {
-              'Accept': 'application/vnd.github+json',
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${state.githubToken}`
-            },
-            body: JSON.stringify(payload)
-          });
-          if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({}));
-            const errorMessage = errorBody.message || `GitHub ответ ${response.status}`;
-            if (response.status === 409 || /sha/i.test(errorMessage) || /does not match/i.test(errorMessage)) {
-              state.remoteSha = null;
-              setSyncStatus('GitHub: данные изменились в репозитории. Нажмите «Загрузить из GitHub» и повторите.', 'error');
-              throw new Error('GitHub: данные изменились в репозитории. Обновите и повторите сохранение.');
-            }
-            throw new Error(errorMessage);
-          }
-          const result = await response.json();
-          state.remoteSha = result.content?.sha || state.remoteSha;
-          utils.msg('Изменения опубликованы на GitHub');
-          setSyncStatus('GitHub: изменения опубликованы', 'ok');
-        } catch (err) {
-          const message = typeof err?.message === 'string' && err.message.trim().startsWith('GitHub:')
-            ? err.message.trim()
-            : `GitHub: ${err?.message || 'неизвестная ошибка'}`;
-          setSyncStatus(message, 'error');
-          throw err;
-        } finally {
-          state.isSyncing = false;
-        }
-      },
-      async syncFromGitHub() {
-        if (state.isSyncing) {
-          utils.msg('Синхронизация уже выполняется, подождите…', 'error');
+    const supabaseSync = {
+      async reload(){
+        const urlInput = document.getElementById('supabaseUrl');
+        const keyInput = document.getElementById('supabaseKey');
+        const bucketInput = document.getElementById('supabaseBucket');
+        const url = urlInput?.value.trim();
+        const key = keyInput?.value.trim();
+        const bucket = (bucketInput?.value.trim() || CONFIG.DEFAULT_BUCKET);
+        if (bucketInput && !bucketInput.value.trim()) bucketInput.value = bucket;
+        if (!url || !key) {
+          setSyncStatus('Supabase: укажите URL и ключ', 'error');
           return;
         }
-        state.isSyncing = true;
-        setSyncStatus('GitHub: обновление из репозитория…', 'pending');
-        utils.msg('Обновление данных из GitHub…');
+        localStorage.setItem(CONFIG.SUPABASE_URL_KEY, url);
+        localStorage.setItem(CONFIG.SUPABASE_KEY_KEY, key);
+        localStorage.setItem(CONFIG.SUPABASE_BUCKET_KEY, bucket);
+        state.supabaseUrl = url;
+        state.supabaseKey = key;
+        state.supabaseBucket = bucket;
         try {
-          await this.loadFromGitHub();
-          ui.loadProjects();
-          ui.loadProjectList();
-          ui.loadPriceList();
-          ui.renderPriceAdminList();
-          utils.msg('Данные синхронизированы с GitHub');
-          setSyncStatus('GitHub: данные синхронизированы', 'ok');
+          state.supabase = window.supabase.createClient(url, key, { auth: { persistSession: false } });
+          await loadSupabaseData();
         } catch (err) {
-          utils.msg('Ошибка загрузки GitHub: ' + err.message, 'error');
-          setSyncStatus('GitHub: ' + err.message, 'error');
-        } finally {
-          state.isSyncing = false;
+          console.error(err);
+          setSyncStatus('Supabase: не удалось подключиться', 'error');
         }
       },
-      clearToken() {
-        state.githubToken = '';
-        sessionStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
-        localStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
-        const input = document.getElementById('githubToken');
-        if (input) input.value = '';
-        utils.msg('GitHub токен удалён');
-        setSyncStatus('GitHub: токен не указан', 'error');
+      clearCredentials(){
+        localStorage.removeItem(CONFIG.SUPABASE_URL_KEY);
+        localStorage.removeItem(CONFIG.SUPABASE_KEY_KEY);
+        localStorage.removeItem(CONFIG.SUPABASE_BUCKET_KEY);
+        state.supabase = null;
+        state.supabaseUrl = '';
+        state.supabaseKey = '';
+        state.supabaseBucket = CONFIG.DEFAULT_BUCKET;
+        const urlInput = document.getElementById('supabaseUrl');
+        const keyInput = document.getElementById('supabaseKey');
+        const bucketInput = document.getElementById('supabaseBucket');
+        if (urlInput) urlInput.value = '';
+        if (keyInput) keyInput.value = '';
+        if (bucketInput) bucketInput.value = CONFIG.DEFAULT_BUCKET;
+        setSyncStatus('Supabase: ключ очищен', 'error');
       }
     };
 
-    function setSyncStatus(text, state = 'pending'){
+    function setSyncStatus(text, stateValue = 'pending'){
       const indicator = document.getElementById('syncStatus');
       if (!indicator) return;
       indicator.textContent = text;
-      indicator.dataset.state = state;
+      indicator.dataset.state = stateValue;
     }
 
-    function initSyncSettings(){
-      const repoInput = document.getElementById('githubRepo');
-      const tokenInput = document.getElementById('githubToken');
-      const storedRepo = localStorage.getItem(CONFIG.REPO_STORAGE_KEY);
-      if (storedRepo) {
-        const applied = setRepo(storedRepo, true);
-        if (repoInput) repoInput.value = applied ? storedRepo : `${state.repoOwner}/${state.repoName}`;
-      } else if (repoInput) {
-        repoInput.value = `${state.repoOwner}/${state.repoName}`;
-      }
+    function loadDefaultData(){
+      state.projects = DEFAULT_PROJECTS.map((p, index) => ({
+        id: `demo-${index}`,
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        sort_order: index,
+        images: (p.images || []).map((url, i) => ({
+          id: `demo-${index}-${i}`,
+          url,
+          storagePath: null,
+          sort_order: i
+        }))
+      }));
+      state.priceList = DEFAULT_PRICE_LIST.map((item, index) => ({
+        id: `demo-price-${index}`,
+        title: item.title,
+        description: item.description,
+        price: item.price,
+        unit: item.unit,
+        sort_order: index
+      }));
+    }
 
-      if (repoInput) {
-        repoInput.addEventListener('change', () => setRepo(repoInput.value));
-      }
-
-      const storedToken = sessionStorage.getItem(CONFIG.TOKEN_STORAGE_KEY) || localStorage.getItem(CONFIG.TOKEN_STORAGE_KEY) || '';
-      if (storedToken) {
-        state.githubToken = storedToken;
-        setSyncStatus('GitHub: токен сохранён, можно публиковать изменения', 'pending');
-      }
-      if (tokenInput) {
-        tokenInput.value = storedToken;
-        if (!storedToken) {
-          setSyncStatus('GitHub: токен не указан', 'error');
-        }
-        tokenInput.addEventListener('input', (e) => {
-          state.githubToken = e.target.value.trim();
-          if (state.githubToken) {
-            sessionStorage.setItem(CONFIG.TOKEN_STORAGE_KEY, state.githubToken);
-            localStorage.setItem(CONFIG.TOKEN_STORAGE_KEY, state.githubToken);
-            setSyncStatus('GitHub: токен сохранён, можно публиковать изменения', 'pending');
-          } else {
-            sessionStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
-            localStorage.removeItem(CONFIG.TOKEN_STORAGE_KEY);
-            setSyncStatus('GitHub: токен не указан', 'error');
-          }
-        });
-      }
-
-      function setRepo(value, silent = false){
-        const parts = value.split('/').map(p => p.trim()).filter(Boolean);
-        if (parts.length === 2) {
-          [state.repoOwner, state.repoName] = parts;
-          localStorage.setItem(CONFIG.REPO_STORAGE_KEY, `${state.repoOwner}/${state.repoName}`);
-          return true;
-        } else if (!silent) {
-          utils.msg('Используйте формат owner/repo для GitHub', 'error');
-          if (repoInput) repoInput.value = `${state.repoOwner}/${state.repoName}`;
-        }
-        return false;
+    function initSupabaseSettings(){
+      const storedUrl = localStorage.getItem(CONFIG.SUPABASE_URL_KEY) || '';
+      const storedKey = localStorage.getItem(CONFIG.SUPABASE_KEY_KEY) || '';
+      const storedBucket = localStorage.getItem(CONFIG.SUPABASE_BUCKET_KEY) || CONFIG.DEFAULT_BUCKET;
+      state.supabaseUrl = storedUrl;
+      state.supabaseKey = storedKey;
+      state.supabaseBucket = storedBucket;
+      const urlInput = document.getElementById('supabaseUrl');
+      const keyInput = document.getElementById('supabaseKey');
+      const bucketInput = document.getElementById('supabaseBucket');
+      if (urlInput) urlInput.value = storedUrl;
+      if (keyInput) keyInput.value = storedKey;
+      if (bucketInput) bucketInput.value = storedBucket;
+      if (!storedUrl || !storedKey) {
+        setSyncStatus('Supabase: ожидание конфигурации', 'pending');
       }
     }
+
+    async function loadSupabaseData(){
+      if (!state.supabase) {
+        setSyncStatus('Supabase: нет подключения', 'error');
+        return;
+      }
+      setSyncStatus('Supabase: загружаем данные…', 'pending');
+      state.isSyncing = true;
+      try {
+        const { data: projects, error: projectsError } = await state.supabase
+          .from('projects')
+          .select('id, name, description, price, sort_order, project_images(id, url, storage_path, sort_order)')
+          .order('sort_order', { ascending: true })
+          .order('sort_order', { foreignTable: 'project_images', ascending: true });
+        if (projectsError) throw projectsError;
+        const normalizedProjects = (projects || []).map(p => ({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          price: p.price,
+          sort_order: p.sort_order ?? 0,
+          images: (p.project_images || []).map(img => ({
+            id: img.id,
+            url: img.url,
+            storagePath: img.storage_path,
+            sort_order: img.sort_order ?? 0
+          })).sort((a,b)=> (a.sort_order??0) - (b.sort_order??0))
+        }));
+
+        const { data: prices, error: priceError } = await state.supabase
+          .from('price_items')
+          .select('id, title, description, price, unit, sort_order')
+          .order('sort_order', { ascending: true });
+        if (priceError) throw priceError;
+
+        state.projects = normalizedProjects;
+        state.priceList = (prices || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          price: item.price,
+          unit: item.unit,
+          sort_order: item.sort_order ?? 0
+        }));
+
+        ui.loadProjects();
+        ui.loadProjectList();
+        ui.loadPriceList();
+        ui.renderPriceAdminList();
+        setSyncStatus('Supabase: данные загружены', 'ok');
+      } catch (error) {
+        console.error('Supabase load error', error);
+        utils.msg('Ошибка Supabase: ' + error.message, 'error');
+        setSyncStatus('Supabase: ' + (error.message || 'ошибка загрузки'), 'error');
+      } finally {
+        state.isSyncing = false;
+      }
+    }
+
 
     // Работа с изображениями
     const imageHandler = {
-      toBase64(file){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); },
-      async process(files){ const out = []; for (const f of files){ try { utils.validateImage(f); out.push({ id: utils.id(), name: f.name, data: await this.toBase64(f) }); } catch(e){ utils.msg(`Ошибка ${f.name}: ${e.message}`, 'error'); } } return out; }
+      process(fileList){
+        const out = [];
+        for (const file of fileList) {
+          try {
+            utils.validateImage(file);
+            const preview = URL.createObjectURL(file);
+            out.push({
+              id: null,
+              file,
+              preview,
+              url: null,
+              storagePath: null,
+              name: file.name,
+              sort_order: state.uploadedFiles.length + out.length,
+              isObjectUrl: true
+            });
+          } catch (error) {
+            utils.msg(`Ошибка ${file.name}: ${error.message}`, 'error');
+          }
+        }
+        return out;
+      }
     };
+
+    function ensureSupabase(){
+      if (!state.supabase) throw new Error('Supabase не настроен. Откройте вкладку «Настройки» и подключитесь.');
+    }
 
     const priceManager = {
       async create(data){
-        const item = {
-          id: utils.id(),
+        ensureSupabase();
+        const payload = {
           title: data.title,
           description: data.description,
           price: parseFloat(data.price ?? 0) || 0,
-          unit: data.unit || ''
+          unit: data.unit || '',
+          sort_order: state.priceList.length
         };
-        state.priceList.push(item);
-        try {
-          await storage.save();
-          ui.loadPriceList();
-          ui.renderPriceAdminList();
-          utils.msg('Услуга добавлена');
-          return item;
-        } catch (err) {
-          state.priceList.pop();
-          storage.saveToLocalCache();
-          throw err;
-        }
+        const { error } = await state.supabase.from('price_items').insert(payload);
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Услуга добавлена');
       },
       async update(id, data){
-        const index = state.priceList.findIndex(item => item.id === id);
-        if (index < 0) throw new Error('Запись прайса не найдена');
-        const previous = { ...state.priceList[index] };
-        state.priceList[index] = {
-          ...state.priceList[index],
+        ensureSupabase();
+        const payload = {
           title: data.title,
           description: data.description,
           price: parseFloat(data.price ?? 0) || 0,
           unit: data.unit || ''
         };
-        try {
-          await storage.save();
-          ui.loadPriceList();
-          ui.renderPriceAdminList();
-          utils.msg('Позиция прайса обновлена');
-          return state.priceList[index];
-        } catch (err) {
-          state.priceList[index] = previous;
-          storage.saveToLocalCache();
-          throw err;
-        }
+        const { error } = await state.supabase.from('price_items').update(payload).eq('id', id);
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Позиция прайса обновлена');
       },
       async delete(id){
-        const index = state.priceList.findIndex(item => item.id === id);
-        if (index < 0) return;
+        ensureSupabase();
         if (!confirm('Удалить эту услугу из прайса?')) return;
-        const [removed] = state.priceList.splice(index, 1);
-        try {
-          await storage.save();
-          ui.loadPriceList();
-          ui.renderPriceAdminList();
-          utils.msg('Позиция удалена из прайса');
-        } catch (err) {
-          if (removed) state.priceList.splice(index, 0, removed);
-          storage.saveToLocalCache();
-          utils.msg('Не удалось удалить позицию: ' + err.message, 'error');
-        }
+        const { error } = await state.supabase.from('price_items').delete().eq('id', id);
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Позиция удалена из прайса');
       },
       async move(id, direction){
+        ensureSupabase();
         const index = state.priceList.findIndex(item => item.id === id);
         if (index < 0) return;
-        const targetIndex = index + direction;
-        if (targetIndex < 0 || targetIndex >= state.priceList.length) return;
-        const item = state.priceList.splice(index, 1)[0];
-        state.priceList.splice(targetIndex, 0, item);
-        try {
-          await storage.save();
-          ui.loadPriceList();
-          ui.renderPriceAdminList();
-        } catch (err) {
-          state.priceList.splice(targetIndex, 1);
-          state.priceList.splice(index, 0, item);
-          storage.saveToLocalCache();
-          utils.msg('Ошибка при изменении порядка: ' + err.message, 'error');
-        }
+        const target = index + direction;
+        if (target < 0 || target >= state.priceList.length) return;
+        const current = state.priceList[index];
+        const other = state.priceList[target];
+        const currentOrder = current.sort_order ?? index;
+        const otherOrder = other.sort_order ?? target;
+        const { error } = await state.supabase.from('price_items').upsert([
+          { id: current.id, sort_order: otherOrder },
+          { id: other.id, sort_order: currentOrder }
+        ]);
+        if (error) throw error;
+        await loadSupabaseData();
       },
       get: (id) => state.priceList.find(item => item.id === id)
     };
 
-    // Логика проектов
-    const projectManager = {
-      async create(d){ 
-        const p = { id: utils.id(), name: d.name, description: d.description, price: parseInt(d.price,10)||0, images: d.images||[], createdAt: new Date().toISOString() }; 
-        state.projects.push(p); 
-        try {
-          await storage.save();
-          ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект создан');
-          return p;
-        } catch (err) {
-          state.projects.pop();
-          storage.saveToLocalCache();
-          throw err;
-        }
+    const supabaseImages = {
+      async upload(projectId, file){
+        ensureSupabase();
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
+        const path = `projects/${projectId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await state.supabase.storage.from(state.supabaseBucket).upload(path, file, { cacheControl: '3600', upsert: false });
+        if (error) throw error;
+        const { data } = state.supabase.storage.from(state.supabaseBucket).getPublicUrl(path);
+        if (!data?.publicUrl) throw new Error('Не удалось получить ссылку на изображение');
+        return { path, url: data.publicUrl };
       },
-      async update(id, d){ 
-        const i = state.projects.findIndex(p=>p.id===id); if(i<0) throw new Error('Проект не найден'); 
-        const prev = { ...state.projects[i] };
-        state.projects[i] = { ...state.projects[i], name:d.name, description:d.description, price: parseInt(d.price,10)||0, images: d.images?.length? d.images : state.projects[i].images, updatedAt: new Date().toISOString() }; 
-        try {
-          await storage.save();
-          ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект обновлён');
-          return state.projects[i];
-        } catch (err) {
-          state.projects[i] = prev;
-          storage.saveToLocalCache();
-          throw err;
-        }
-      },
-      async delete(id){ 
-        const i = state.projects.findIndex(p=>p.id===id); if(i<0) return; 
-        if(confirm('Удалить проект?')){ 
-          const removed = state.projects.splice(i,1)?.[0];
-          try {
-            await storage.save();
-            ui.loadProjects(); ui.loadProjectList(); utils.msg('Проект удалён');
-          } catch (err) {
-            if (removed) state.projects.splice(i, 0, removed);
-            storage.saveToLocalCache();
-            utils.msg('Ошибка удаления: ' + err.message, 'error');
+      async sync(projectId){
+        ensureSupabase();
+        if (state.deletedImages.length) {
+          const ids = state.deletedImages.map(item => item.id).filter(Boolean);
+          if (ids.length) {
+            const { error } = await state.supabase.from('project_images').delete().in('id', ids);
+            if (error) throw error;
           }
+          const paths = state.deletedImages.map(item => item.storagePath).filter(Boolean);
+          if (paths.length) {
+            await state.supabase.storage.from(state.supabaseBucket).remove(paths).catch(()=>{});
+          }
+          state.deletedImages = [];
         }
+        let order = 0;
+        for (const entry of state.uploadedFiles) {
+          if (entry.file) {
+            const uploaded = await this.upload(projectId, entry.file);
+            const { data, error } = await state.supabase
+              .from('project_images')
+              .insert({ project_id: projectId, url: uploaded.url, storage_path: uploaded.path, sort_order: order })
+              .select('id, url, storage_path, sort_order')
+              .single();
+            if (error) throw error;
+            entry.id = data.id;
+            entry.url = data.url;
+            entry.storagePath = data.storage_path;
+            entry.sort_order = data.sort_order ?? order;
+            if (entry.isObjectUrl && entry.preview) {
+              URL.revokeObjectURL(entry.preview);
+            }
+            entry.preview = data.url;
+            entry.isObjectUrl = false;
+            entry.file = null;
+          } else if (entry.id) {
+            const { error } = await state.supabase
+              .from('project_images')
+              .update({ sort_order: order, url: entry.url })
+              .eq('id', entry.id);
+            if (error) throw error;
+            entry.sort_order = order;
+          }
+          order++;
+        }
+      }
+    };
+
+    const projectManager = {
+      async create(data){
+        ensureSupabase();
+        const payload = {
+          name: data.name,
+          description: data.description,
+          price: parseFloat(data.price ?? 0) || 0,
+          sort_order: state.projects.length
+        };
+        const { data: project, error } = await state.supabase.from('projects').insert(payload).select('id').single();
+        if (error) throw error;
+        await supabaseImages.sync(project.id);
+        await loadSupabaseData();
+        utils.msg('Проект создан');
+        return project;
       },
-      get: (id) => state.projects.find(p=>p.id===id)
+      async update(id, data){
+        ensureSupabase();
+        const payload = {
+          name: data.name,
+          description: data.description,
+          price: parseFloat(data.price ?? 0) || 0
+        };
+        const { error } = await state.supabase.from('projects').update(payload).eq('id', id);
+        if (error) throw error;
+        await supabaseImages.sync(id);
+        await loadSupabaseData();
+        utils.msg('Проект обновлён');
+      },
+      async delete(id){
+        ensureSupabase();
+        if (!confirm('Удалить проект?')) return;
+        const project = state.projects.find(p => p.id === id);
+        const paths = (project?.images || []).map(img => img.storagePath).filter(Boolean);
+        const { error: imgDelete } = await state.supabase.from('project_images').delete().eq('project_id', id);
+        if (imgDelete) throw imgDelete;
+        if (paths.length) {
+          await state.supabase.storage.from(state.supabaseBucket).remove(paths).catch(()=>{});
+        }
+        const { error } = await state.supabase.from('projects').delete().eq('id', id);
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Проект удалён');
+      },
+      get: (id) => state.projects.find(p => p.id === id)
     };
 
     // UI
@@ -1123,7 +1058,7 @@
           const imageWrapper = document.createElement('div');
           imageWrapper.className = 'project-image';
           const firstImage = project.images?.[0];
-          const imageSrc = typeof firstImage === 'string' ? firstImage : firstImage?.data;
+          const imageSrc = firstImage?.url || firstImage?.preview;
           if (imageSrc) {
             const imageEl = document.createElement('img');
             imageEl.src = imageSrc;
@@ -1306,7 +1241,7 @@
           return;
         }
         const current = imgs[state.currentImageIndex];
-        const url = typeof current === 'string' ? current : current?.data;
+        const url = current?.url || current?.preview;
         if (!url) {
           modalImage.textContent = 'Изображение недоступно';
           modalImage.classList.add('empty');
@@ -1331,7 +1266,7 @@
         state.projects.forEach(p=>{ 
           const div = document.createElement('div'); 
           div.className='project-item'; 
-          const img = p.images?.[0] ? (typeof p.images[0]==='string'? p.images[0] : p.images[0].data) : '';
+          const img = p.images?.[0]?.url || '';
           div.innerHTML = `
             <h4>${p.name}</h4>
             <p>${utils.trunc(p.description, 160)}</p>
@@ -1350,7 +1285,17 @@
         document.getElementById('projectDescription').value = project.description;
         document.getElementById('projectPriceInput').value = project.price;
         // загрузить текущие изображения в форму
-        state.uploadedFiles = (project.images||[]).map((img, i)=>({ id: `existing_${i}`, data: typeof img==='string'? img : img.data, name: typeof img==='string'? `image_${i}.jpg` : img.name }));
+        state.uploadedFiles = (project.images||[]).map((img, index)=>({
+          id: img.id,
+          file: null,
+          preview: img.url,
+          url: img.url,
+          storagePath: img.storagePath,
+          name: `image_${index}.jpg`,
+          sort_order: img.sort_order ?? index,
+          isObjectUrl: false
+        }));
+        state.deletedImages = [];
         ui.updateUploadedImages();
         switchAdminPane('projects');
         switchProjectTab('add');
@@ -1372,7 +1317,7 @@
           const wrapper=document.createElement('div'); wrapper.className='uploaded-image';
 
           const img=document.createElement('img');
-          img.src=file.data;
+          img.src=file.preview || file.url;
           img.alt=file.name || `Изображение ${index+1}`;
           wrapper.appendChild(img);
 
@@ -1414,9 +1359,21 @@
         if (targetIndex < 0 || targetIndex >= state.uploadedFiles.length) return;
         const [item] = state.uploadedFiles.splice(index, 1);
         state.uploadedFiles.splice(targetIndex, 0, item);
+        state.uploadedFiles.forEach((file, idx)=> file.sort_order = idx);
         ui.updateUploadedImages();
       },
-      removeUploadedImage(i){ state.uploadedFiles.splice(i,1); ui.updateUploadedImages(); }
+      removeUploadedImage(i){ 
+        const removed = state.uploadedFiles.splice(i,1)?.[0];
+        if (removed){
+          if (removed.id){
+            state.deletedImages.push({ id: removed.id, storagePath: removed.storagePath });
+          }
+          if (removed.isObjectUrl && removed.preview){
+            URL.revokeObjectURL(removed.preview);
+          }
+        }
+        ui.updateUploadedImages(); 
+      }
     };
 
     // Навигация изображений в модалке
@@ -1548,15 +1505,21 @@
 
     async function saveProject(e){ 
       e.preventDefault(); 
+      try {
+        ensureSupabase();
+      } catch (err) {
+        utils.msg(err.message, 'error');
+        return;
+      }
+      const data = { 
+        name: document.getElementById('projectName').value, 
+        description: document.getElementById('projectDescription').value, 
+        price: document.getElementById('projectPriceInput').value
+      };
+      state.uploadedFiles.forEach((file, idx)=> file.sort_order = idx);
+      const id = document.getElementById('editingId').value; 
       try{ 
-        const data = { 
-          name: document.getElementById('projectName').value, 
-          description: document.getElementById('projectDescription').value, 
-          price: document.getElementById('projectPriceInput').value, 
-          images: state.uploadedFiles.map(f=>f.data) 
-        };
-        const id = document.getElementById('editingId').value; 
-        if (id) await projectManager.update(parseInt(id,10), data); 
+        if (id) await projectManager.update(id, data); 
         else await projectManager.create(data); 
         cancelEdit(); 
       } catch(err){ utils.msg('Ошибка сохранения: ' + err.message, 'error'); } 
@@ -1583,9 +1546,6 @@
         cancelPriceEdit();
       } catch (err) {
         utils.msg('Ошибка сохранения прайса: ' + err.message, 'error');
-        if (typeof err?.message === 'string' && err.message.includes('данные изменились')) {
-          await storage.syncFromGitHub().catch(()=>{});
-        }
       }
     }
 
@@ -1634,15 +1594,15 @@
     document.addEventListener('DOMContentLoaded', async ()=>{
       initNavigation();
       initDragAndDrop();
-      initSyncSettings();
-      try {
-        await storage.load();
-      } catch (err) {
-        utils.msg('Не удалось загрузить данные из GitHub: ' + err.message, 'error');
+      initSupabaseSettings();
+      if (state.supabaseUrl && state.supabaseKey) {
+        await supabaseSync.reload();
+      } else {
+        loadDefaultData();
+        ui.loadProjects();
+        ui.loadPriceList();
+        ui.renderPriceAdminList();
       }
-      ui.loadProjects();
-      ui.loadPriceList();
-      ui.renderPriceAdminList();
       checkAdminAccess();
 
       // Шорткат как в (2)
@@ -1671,6 +1631,7 @@
     window.ui = ui;
     window.projectManager = projectManager;
     window.priceManager = priceManager;
+    window.supabaseSync = supabaseSync;
   </script>
 </body>
 </html>
