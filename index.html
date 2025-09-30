@@ -10,6 +10,7 @@
     window.SUPABASE_PUBLIC_URL = 'https://qpctnhjxuwctslgzkvqy.supabase.co';
     window.SUPABASE_PUBLIC_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwY3RuaGp4dXdjdHNsZ3prdnF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMjg5MDcsImV4cCI6MjA3NDgwNDkwN30.PRr3uDQxeEtX1MiIBkrLqlEO_GUgFKgVfanF0Bef0t0';
     window.SUPABASE_PUBLIC_BUCKET = 'project-media';
+    window.SUPABASE_PROXY = 'https://qpctnhjxuwctslgzkvqy.functions.supabase.co/admin-proxy?path=';
   </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -759,6 +760,31 @@
       indicator.dataset.state = stateValue;
     }
 
+    async function fetchSupabase(url, init = {}){
+      const attempt = async (target) => {
+        const response = await fetch(target, { ...init, mode: 'cors' });
+        if (!response.ok) {
+          const body = await response.text().catch(()=>'');
+          throw new Error(`Supabase ${response.status}: ${body || 'ошибка запроса'}`);
+        }
+        return response;
+      };
+
+      try {
+        return await attempt(url);
+      } catch (error) {
+        if (window.SUPABASE_PROXY) {
+          const relative = url.startsWith(state.supabaseUrl)
+            ? url.slice(state.supabaseUrl.length)
+            : url;
+          const proxiedUrl = `${window.SUPABASE_PROXY}${encodeURIComponent(relative.startsWith('/') ? relative : `/${relative}`)}`;
+          console.warn('Supabase fetch через прокси', proxiedUrl, error.message);
+          return attempt(proxiedUrl);
+        }
+        throw error;
+      }
+    }
+
     function loadDefaultData(){
       state.projects = DEFAULT_PROJECTS.map((p, index) => ({
         id: `demo-${index}`,
@@ -824,16 +850,21 @@
           throw new Error("Таблицы Supabase не найдены. Выполни SQL из инструкции и повтори подключение.");
         }
 
-        const projectsResponse = await fetch(`${state.supabaseUrl}/rest/v1/projects?select=id,name,description,price,sort_order,project_images(id,url,storage_path,sort_order)&order=sort_order.asc&project_images.order=sort_order.asc`, {
+        const projectsResponse = await fetchSupabase(`${state.supabaseUrl}/rest/v1/projects?select=id,name,description,price,sort_order,project_images(id,url,storage_path,sort_order)&order=sort_order.asc&project_images.order=sort_order.asc`, {
           headers: {
             'apikey': state.supabaseKey,
-            'Authorization': `Bearer ${state.supabaseKey}`
+            'Authorization': `Bearer ${state.supabaseKey}`,
+            'Accept': 'application/json'
           }
         });
-        if (!projectsResponse.ok) {
-          throw new Error(`Supabase REST ${projectsResponse.status}`);
-        }
-        const projects = await projectsResponse.json();
+        const projectsText = await projectsResponse.text();
+        let projects;
+        try {
+          projects = JSON.parse(projectsText);
+      } catch (parseErr) {
+        console.error('Supabase projects raw response:', projectsText);
+        throw new Error('Supabase projects: ' + projectsText.slice(0, 200));
+      }
         const normalizedProjects = (projects || []).map(p => ({
           id: p.id,
           name: p.name,
@@ -848,16 +879,21 @@
           })).sort((a,b)=> (a.sort_order??0) - (b.sort_order??0))
         }));
 
-        const priceResponse = await fetch(`${state.supabaseUrl}/rest/v1/price_items?select=id,title,description,price,unit,sort_order&order=sort_order.asc`, {
+        const priceResponse = await fetchSupabase(`${state.supabaseUrl}/rest/v1/price_items?select=id,title,description,price,unit,sort_order&order=sort_order.asc`, {
           headers: {
             'apikey': state.supabaseKey,
-            'Authorization': `Bearer ${state.supabaseKey}`
+            'Authorization': `Bearer ${state.supabaseKey}`,
+            'Accept': 'application/json'
           }
         });
-        if (!priceResponse.ok) {
-          throw new Error(`Supabase REST ${priceResponse.status}`);
-        }
-        const prices = await priceResponse.json();
+        const priceText = await priceResponse.text();
+        let prices;
+        try {
+          prices = JSON.parse(priceText);
+      } catch (parseErr) {
+        console.error('Supabase price raw response:', priceText);
+        throw new Error('Supabase price list: ' + priceText.slice(0, 200));
+      }
 
         state.projects = normalizedProjects;
         state.priceList = (prices || []).map(item => ({
