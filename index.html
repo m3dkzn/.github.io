@@ -1556,6 +1556,9 @@
         cancelPriceEdit();
       } catch (err) {
         utils.msg('Ошибка сохранения прайса: ' + err.message, 'error');
+        if (typeof err?.message === 'string' && err.message.includes('данные изменились')) {
+          storage.syncFromGitHub();
+        }
       }
     }
 
