@@ -783,14 +783,27 @@
       },
       async loadFromGitHub() {
         const apiUrl = `https://api.github.com/repos/${state.repoOwner}/${state.repoName}/contents/${CONFIG.GITHUB_DATA_PATH}?ref=${CONFIG.GITHUB_BRANCH}`;
-        const response = await fetch(apiUrl, { headers: { 'Accept': 'application/vnd.github+json' }, cache: 'no-store' });
+        const headers = { 'Accept': 'application/vnd.github+json' };
+        if (state.githubToken) headers['Authorization'] = `Bearer ${state.githubToken}`;
+        const response = await fetch(apiUrl, { headers, cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`GitHub ответ ${response.status}`);
         }
         const data = await response.json();
-        if (!data.content) throw new Error('Пустой ответ GitHub');
-        const decoded = utils.decodeBase64(data.content);
-        const payload = JSON.parse(decoded);
+        let payload;
+        if (data.content) {
+          const decoded = utils.decodeBase64(data.content);
+          payload = JSON.parse(decoded);
+        } else if (data.download_url) {
+          const rawHeaders = state.githubToken ? { 'Authorization': `Bearer ${state.githubToken}` } : {};
+          const rawResponse = await fetch(data.download_url, { headers: rawHeaders, cache: 'no-store' });
+          if (!rawResponse.ok) throw new Error(`GitHub raw ${rawResponse.status}`);
+          const rawText = await rawResponse.text();
+          payload = JSON.parse(rawText);
+        } else {
+          throw new Error('Пустой ответ GitHub');
+        }
+        if (!payload) throw new Error('Не удалось прочитать данные GitHub');
         applyPortfolioData(payload);
         state.remoteSha = data.sha || null;
         this.saveToLocalCache();
@@ -1557,7 +1570,7 @@
       } catch (err) {
         utils.msg('Ошибка сохранения прайса: ' + err.message, 'error');
         if (typeof err?.message === 'string' && err.message.includes('данные изменились')) {
-          storage.syncFromGitHub();
+          await storage.syncFromGitHub().catch(()=>{});
         }
       }
     }
