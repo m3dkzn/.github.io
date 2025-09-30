@@ -908,7 +908,6 @@
     const priceManager = {
       async create(data){
         ensureSupabase();
-        enforceServiceRole();
         const payload = {
           title: data.title,
           description: data.description,
@@ -923,7 +922,6 @@
       },
       async update(id, data){
         ensureSupabase();
-        enforceServiceRole();
         const payload = {
           title: data.title,
           description: data.description,
@@ -937,7 +935,6 @@
       },
       async delete(id){
         ensureSupabase();
-        enforceServiceRole();
         if (!confirm('Удалить эту услугу из прайса?')) return;
         const { error } = await state.supabase.from('price_items').delete().eq('id', id);
         if (error) throw error;
@@ -946,7 +943,6 @@
       },
       async move(id, direction){
         ensureSupabase();
-        enforceServiceRole();
         const index = state.priceList.findIndex(item => item.id === id);
         if (index < 0) return;
         const target = index + direction;
@@ -1026,7 +1022,6 @@
     const projectManager = {
       async create(data){
         ensureSupabase();
-        enforceServiceRole();
         const payload = {
           name: data.name,
           description: data.description,
@@ -1042,7 +1037,6 @@
       },
       async update(id, data){
         ensureSupabase();
-        enforceServiceRole();
         const payload = {
           name: data.name,
           description: data.description,
@@ -1056,7 +1050,6 @@
       },
       async delete(id){
         ensureSupabase();
-        enforceServiceRole();
         if (!confirm('Удалить проект?')) return;
         const project = state.projects.find(p => p.id === id);
         const paths = (project?.images || []).map(img => img.storagePath).filter(Boolean);
