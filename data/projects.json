@@ -25,5 +25,13 @@
       "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800&h=600&fit=crop"
     ],
     "price": 8000
+  },
+  {
+    "id": 1759248409349.7292,
+    "name": "7657",
+    "description": "567567",
+    "price": 567567,
+    "images": [],
+    "createdAt": "2025-09-30T16:06:49.349Z"
   }
 ]
