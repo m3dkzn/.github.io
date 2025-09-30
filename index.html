@@ -802,18 +802,21 @@
     }
 
     function enforceServiceRole(){
-      if (!state.supabaseKey || !state.supabaseKey.toLowerCase().startsWith('ey')) return;
-      // Supabase service-role ключ содержит "service_role" в payload; если ключ anon, операции записи могут упасть.
+      if (!state.supabaseKey) return;
+      const parts = state.supabaseKey.split('.');
+      if (parts.length < 2) {
+        throw new Error('Supabase ключ некорректен. Проверь значение во вкладке "Настройки".');
+      }
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+      let payload;
       try {
-        const payload = JSON.parse(atob(state.supabaseKey.split('.')[1]));
-        if (payload?.role !== 'service_role') {
-          throw new Error('У Supabase включена RLS. Используй service-role ключ или настрой policies.');
-        }
-      } catch (err) {
-        if (err.message.includes('service-role')) {
-          throw err;
-        }
-        throw new Error('Supabase ключ не похож на service-role. Проверь настройки RLS или измени правило доступа.');
+        payload = JSON.parse(atob(padded));
+      } catch (_) {
+        throw new Error('Supabase ключ не удалось декодировать. Убедись, что вставлен полный JWT.');
+      }
+      if (payload?.role !== 'service_role') {
+        throw new Error('Для изменений используется ключ без роли service_role. Включи policies для anon или укажи service-role ключ.');
       }
     }
 
