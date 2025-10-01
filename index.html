@@ -1329,17 +1329,36 @@
         const list = document.getElementById('projectList'); if(!list) return; list.innerHTML=''; 
         if(!state.projects.length){ list.innerHTML='<p style="color:var(--gray);text-align:center">Проекты не найдены</p>'; return; }
         state.projects.forEach(p=>{ 
-          const div = document.createElement('div'); 
-          div.className='project-item'; 
-          const img = p.images?.[0]?.url || '';
-          div.innerHTML = `
-            <h4>${p.name}</h4>
-            <p>${utils.trunc(p.description, 160)}</p>
-            <div class="project-actions">
-              <button class="btn-success" onclick="ui.editProject(${JSON.stringify(p.id)})">✏️ Редактировать</button>
-              <button class="btn-danger" onclick="projectManager.delete(${JSON.stringify(p.id)})">🗑️ Удалить</button>
-            </div>`;
-          list.appendChild(div); 
+          const wrapper = document.createElement('div'); 
+          wrapper.className='project-item'; 
+
+          const title = document.createElement('h4');
+          title.textContent = p.name || 'Без названия';
+          wrapper.appendChild(title);
+
+          const desc = document.createElement('p');
+          desc.textContent = utils.trunc(p.description || '', 160);
+          wrapper.appendChild(desc);
+
+          const actions = document.createElement('div');
+          actions.className = 'project-actions';
+
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn-success';
+          editBtn.type = 'button';
+          editBtn.textContent = '✏️ Редактировать';
+          editBtn.addEventListener('click', () => ui.editProject(p.id));
+          actions.appendChild(editBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn-danger';
+          deleteBtn.type = 'button';
+          deleteBtn.textContent = '🗑️ Удалить';
+          deleteBtn.addEventListener('click', () => projectManager.delete(p.id));
+          actions.appendChild(deleteBtn);
+
+          wrapper.appendChild(actions);
+          list.appendChild(wrapper); 
         }); 
       },
       editProject(id){
