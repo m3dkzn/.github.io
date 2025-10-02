@@ -147,15 +147,15 @@
     /* Модалка проекта */
     .project-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.85); backdrop-filter: blur(6px); z-index: 2000; padding: 16px; }
     .project-modal.show { display: flex; }
-    .modal-content { width: min(1100px, 100%); max-height: 92svh; border-radius: 18px; overflow: hidden; background: var(--bg-1); border: 1px solid var(--glass-border); box-shadow: var(--shadow); }
+    .modal-content { width: min(1100px, 100%); max-height: 92svh; border-radius: 18px; overflow: hidden; background: var(--bg-1); border: 1px solid var(--glass-border); box-shadow: var(--shadow); display: flex; flex-direction: column; }
     .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--glass-border); background: rgba(0,0,0,.25); }
     .modal-title { margin: 0; font-size: 1.4rem; }
     .close-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: var(--gray); font-size: 24px; cursor: pointer; }
     .close-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
-    .modal-body { display: grid; grid-template-columns: 2fr 1fr; min-height: 480px; }
+    .modal-body { display: grid; grid-template-columns: 2fr 1fr; min-height: 480px; flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
     .modal-left { background: #131317; position: relative; }
-    .modal-image { position: absolute; inset: 0; background: #222; display: flex; align-items: center; justify-content: center; color: var(--primary); overflow: hidden; padding: 12px; }
-    .modal-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .modal-image { position: absolute; inset: 0; background: #222; display: flex; align-items: center; justify-content: center; color: var(--primary); overflow: hidden; padding: 12px; touch-action: pan-y; }
+    .modal-image img { width: 100%; height: 100%; object-fit: contain; }
     .modal-image.empty { color: var(--primary); font-size: 1rem; text-align: center; }
     .image-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,.6); color: #fff; border: 0; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 18px; display: none; align-items: center; justify-content: center; }
     .image-nav:hover { background: var(--primary); color: #06140a; }
@@ -360,13 +360,14 @@
       .nav-menu { position: absolute; top: 72px; right: 16px; flex-direction: column; gap: 10px; background: rgba(15,15,18,.95); border: 1px solid var(--glass-border); border-radius: 16px; padding: 16px; width: min(240px, 90vw); box-shadow: var(--shadow); display: none; }
       .nav-menu.open { display: flex; }
       .nav-link { display: block; }
-      .modal-body { grid-template-columns: 1fr; }
+      .modal-body { grid-template-columns: 1fr; min-height: unset; }
+      .modal-left { min-height: clamp(260px, 65vh, 520px); }
       .projects-grid { grid-template-columns: 1fr; }
       .pricing-section { padding: 28px 18px; }
       .admin-panel { width: 100%; right: -100%; }
       .admin-nav { flex-direction: column; }
       .admin-nav-btn { width: 100%; }
-      .image-nav { display: none !important; }
+      .image-nav { width: 38px; height: 38px; font-size: 16px; }
     }
   </style>
 </head>
@@ -1460,6 +1461,61 @@
       }
     };
 
+    function initModalSwipe(){
+      const area = document.getElementById('modalImage');
+      if (!area) return;
+      let startX = 0;
+      let startY = 0;
+      let isPointerDown = false;
+      const SWIPE_THRESHOLD = 60;
+
+      const reset = (event) => {
+        if (event?.pointerId != null) {
+          try {
+            area.releasePointerCapture(event.pointerId);
+          } catch (_) {}
+        }
+        isPointerDown = false;
+      };
+
+      area.addEventListener('pointerdown', (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        startX = event.clientX;
+        startY = event.clientY;
+        isPointerDown = true;
+        try {
+          area.setPointerCapture(event.pointerId);
+        } catch (_) {}
+      });
+
+      area.addEventListener('pointermove', (event) => {
+        if (!isPointerDown) return;
+        const deltaX = event.clientX - startX;
+        const deltaY = event.clientY - startY;
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 12) {
+          event.preventDefault();
+        }
+      }, { passive: false });
+
+      const handleSwipe = (event) => {
+        if (!isPointerDown) return;
+        const deltaX = event.clientX - startX;
+        const deltaY = event.clientY - startY;
+        reset(event);
+        if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+        if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
+        if (deltaX < 0) nextImage();
+        else prevImage();
+      };
+
+      area.addEventListener('pointerup', handleSwipe);
+      area.addEventListener('pointerleave', (event) => {
+        if (!isPointerDown) return;
+        handleSwipe(event);
+      });
+      area.addEventListener('pointercancel', reset);
+    }
+
     // Навигация изображений в модалке
     function prevImage(){ if(state.currentProject && state.currentImageIndex>0){ state.currentImageIndex--; ui.updateModalImage(); ui.updateImageNavigation(); } }
     function nextImage(){ const p=state.currentProject; if(p && state.currentImageIndex < (p.images?.length||1)-1){ state.currentImageIndex++; ui.updateModalImage(); ui.updateImageNavigation(); } }
@@ -1678,6 +1734,7 @@
     document.addEventListener('DOMContentLoaded', async ()=>{
       initNavigation();
       initDragAndDrop();
+      initModalSwipe();
       initSupabaseSettings();
       if (state.supabaseUrl && state.supabaseKey) {
         await supabaseSync.reload();
