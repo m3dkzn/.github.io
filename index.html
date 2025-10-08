@@ -998,10 +998,11 @@
         const other = state.priceList[target];
         const currentOrder = current.sort_order ?? index;
         const otherOrder = other.sort_order ?? target;
-        const { error } = await state.supabase.from('price_items').upsert([
-          { id: current.id, sort_order: otherOrder },
-          { id: other.id, sort_order: currentOrder }
+        const [first, second] = await Promise.all([
+          state.supabase.from('price_items').update({ sort_order: otherOrder }).eq('id', current.id),
+          state.supabase.from('price_items').update({ sort_order: currentOrder }).eq('id', other.id)
         ]);
+        const error = first.error || second.error;
         if (error) throw error;
         await loadSupabaseData();
         utils.msg('Порядок прайса обновлён');
@@ -1121,10 +1122,11 @@
         const target = state.projects[targetIndex];
         const currentOrder = current.sort_order ?? index;
         const targetOrder = target.sort_order ?? targetIndex;
-        const { error } = await state.supabase.from('projects').upsert([
-          { id: current.id, sort_order: targetOrder },
-          { id: target.id, sort_order: currentOrder }
+        const [first, second] = await Promise.all([
+          state.supabase.from('projects').update({ sort_order: targetOrder }).eq('id', current.id),
+          state.supabase.from('projects').update({ sort_order: currentOrder }).eq('id', target.id)
         ]);
+        const error = first.error || second.error;
         if (error) throw error;
         await loadSupabaseData();
         utils.msg('Порядок проектов обновлён');
