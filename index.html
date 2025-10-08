@@ -136,11 +136,11 @@
     .pricing-title { margin: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 900; color: var(--primary); }
     .pricing-subtitle { margin-top: 12px; color: var(--text-muted); }
     .pricing-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .price-card { background: rgba(15, 15, 18, 0.85); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; position: relative; transition: transform .25s ease, border-color .25s ease; }
+    .price-card { background: rgba(15, 15, 18, 0.85); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; position: relative; transition: transform .25s ease, border-color .25s ease; display: flex; flex-direction: column; gap: 14px; min-height: 220px; }
     .price-card:hover { transform: translateY(-4px); border-color: var(--primary); }
     .price-card h3 { margin: 0 0 8px; color: var(--text); font-size: 1.2rem; }
     .price-card p { margin: 0 0 12px; color: var(--text-muted); white-space: pre-line; }
-    .price-row { display: flex; align-items: baseline; gap: 6px; }
+    .price-row { display: flex; align-items: baseline; gap: 6px; margin-top: auto; align-self: flex-start; }
     .price-value { font-size: 1.6rem; font-weight: 800; color: #a6f3b3; }
     .price-unit { font-size: 0.85rem; color: var(--gray); }
 
@@ -1904,7 +1904,7 @@
         unit: document.getElementById('priceUnit').value
       };
       const idValue = document.getElementById('priceEditingId').value;
-      const id = idValue ? Number(idValue) : null;
+      const id = idValue ? utils.normalizeId(idValue) : null;
       try {
         if (id) {
           await priceManager.update(id, data);
