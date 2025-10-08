@@ -360,6 +360,7 @@
       .nav-menu { position: absolute; top: 72px; right: 16px; flex-direction: column; gap: 10px; background: rgba(15,15,18,.95); border: 1px solid var(--glass-border); border-radius: 16px; padding: 16px; width: min(240px, 90vw); box-shadow: var(--shadow); display: none; }
       .nav-menu.open { display: flex; }
       .nav-link { display: block; }
+      .hero { padding-top: 130px; padding-bottom: 60px; }
       .modal-body { grid-template-columns: 1fr; min-height: unset; }
       .modal-left { min-height: clamp(260px, 65vh, 520px); }
       .projects-grid { grid-template-columns: 1fr; }
@@ -1003,6 +1004,7 @@
         ]);
         if (error) throw error;
         await loadSupabaseData();
+        utils.msg('Порядок прайса обновлён');
       },
       get: (id) => state.priceList.find(item => item.id === id)
     };
@@ -1108,6 +1110,24 @@
         if (error) throw error;
         await loadSupabaseData();
         utils.msg('Проект удалён');
+      },
+      async move(id, direction){
+        ensureSupabase();
+        const index = state.projects.findIndex(project => project.id === id);
+        if (index < 0) return;
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= state.projects.length) return;
+        const current = state.projects[index];
+        const target = state.projects[targetIndex];
+        const currentOrder = current.sort_order ?? index;
+        const targetOrder = target.sort_order ?? targetIndex;
+        const { error } = await state.supabase.from('projects').upsert([
+          { id: current.id, sort_order: targetOrder },
+          { id: target.id, sort_order: currentOrder }
+        ]);
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Порядок проектов обновлён');
       },
       get: (id) => state.projects.find(p => p.id === id)
     };
@@ -1239,13 +1259,6 @@
           editBtn.addEventListener('click', () => ui.editPrice(item.id));
           controls.appendChild(editBtn);
 
-          const deleteBtn = document.createElement('button');
-          deleteBtn.className = 'btn-danger';
-          deleteBtn.type = 'button';
-          deleteBtn.textContent = '🗑️ Удалить';
-          deleteBtn.addEventListener('click', () => priceManager.delete(item.id));
-          controls.appendChild(deleteBtn);
-
           const moveUp = document.createElement('button');
           moveUp.className = 'btn-light';
           moveUp.type = 'button';
@@ -1261,6 +1274,13 @@
           moveDown.disabled = index === list.length - 1;
           moveDown.addEventListener('click', () => priceManager.move(item.id, 1));
           controls.appendChild(moveDown);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn-danger';
+          deleteBtn.type = 'button';
+          deleteBtn.textContent = '🗑️ Удалить';
+          deleteBtn.addEventListener('click', () => priceManager.delete(item.id));
+          controls.appendChild(deleteBtn);
 
           block.appendChild(controls);
           container.appendChild(block);
@@ -1329,7 +1349,7 @@
       loadProjectList(){ 
         const list = document.getElementById('projectList'); if(!list) return; list.innerHTML=''; 
         if(!state.projects.length){ list.innerHTML='<p style="color:var(--gray);text-align:center">Проекты не найдены</p>'; return; }
-        state.projects.forEach(p=>{ 
+        state.projects.forEach((p, index)=>{ 
           const wrapper = document.createElement('div'); 
           wrapper.className='project-item'; 
 
@@ -1350,6 +1370,22 @@
           editBtn.textContent = '✏️ Редактировать';
           editBtn.addEventListener('click', () => ui.editProject(p.id));
           actions.appendChild(editBtn);
+
+          const moveUp = document.createElement('button');
+          moveUp.className = 'btn-light';
+          moveUp.type = 'button';
+          moveUp.textContent = '⬆️';
+          moveUp.disabled = index === 0;
+          moveUp.addEventListener('click', () => projectManager.move(p.id, -1));
+          actions.appendChild(moveUp);
+
+          const moveDown = document.createElement('button');
+          moveDown.className = 'btn-light';
+          moveDown.type = 'button';
+          moveDown.textContent = '⬇️';
+          moveDown.disabled = index === state.projects.length - 1;
+          moveDown.addEventListener('click', () => projectManager.move(p.id, 1));
+          actions.appendChild(moveDown);
 
           const deleteBtn = document.createElement('button');
           deleteBtn.className = 'btn-danger';
