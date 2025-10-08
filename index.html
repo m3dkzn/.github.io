@@ -312,14 +312,16 @@
     .btn-danger:hover { background: #ff3742; transform: scale(1.05); }
     
     .project-list { display: grid; gap: 20px; }
-    .project-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; padding: 25px; transition: all 0.3s ease; }
+    .project-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 16px; padding: 25px; transition: all 0.3s ease; cursor: grab; }
     .project-item:hover { border-color: var(--primary); transform: translateX(5px); }
+    .project-item.dragging { opacity: 0.6; border-style: dashed; cursor: grabbing; }
     .project-item h4 { color: var(--primary); margin-bottom: 10px; font-size: 1.2rem; }
     .project-item p { color: var(--text-muted); margin-bottom: 15px; line-height: 1.5; }
     .project-actions { display: flex; gap: 10px; margin-top: 15px; }
     .price-admin { display: grid; gap: 24px; }
     .price-list-items { display: grid; gap: 16px; }
-    .price-list-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 14px; padding: 18px; display: grid; gap: 12px; }
+    .price-list-item { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 14px; padding: 18px; display: grid; gap: 12px; cursor: grab; }
+    .price-list-item.dragging { opacity: 0.6; border-style: dashed; cursor: grabbing; }
     .price-list-item header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
     .price-list-item h4 { margin: 0; color: var(--primary); }
     .price-controls { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -333,6 +335,7 @@
     .sync-status[data-state="error"] { color: var(--error); }
     .sync-status[data-state="error"]::before { color: var(--error); }
     .sync-status[data-state="pending"]::before { color: #f0d264; }
+    .project-list.sorting, .price-list-items.sorting { opacity: 0.6; pointer-events: none; }
     .admin-settings { margin: 20px 0 30px; padding: 20px; border: 1px dashed var(--glass-border); border-radius: 14px; background: rgba(23, 23, 27, 0.6); }
     .admin-settings h3 { margin: 0 0 12px; color: var(--primary); font-size: 1.2rem; }
     .admin-settings p { margin: 0 0 12px; color: var(--text-muted); font-size: 0.9rem; }
@@ -707,6 +710,11 @@
         if (!file.type.startsWith('image/')) throw new Error('Файл должен быть изображением');
         if (file.size > CONFIG.MAX_IMAGE_SIZE) throw new Error('Размер не должен превышать 5 MB');
         return true;
+      },
+      normalizeId(value) {
+        if (typeof value === 'number') return value;
+        const str = String(value);
+        return /^\d+$/.test(str) ? Number(str) : str;
       }
     };
 
@@ -1007,6 +1015,28 @@
         await loadSupabaseData();
         utils.msg('Порядок прайса обновлён');
       },
+      async reorder(orderIds){
+        ensureSupabase();
+        const currentMap = new Map(state.priceList.map(item => [String(item.id), item]));
+        const updates = [];
+        orderIds.forEach((rawId, index) => {
+          const key = String(rawId);
+          const current = currentMap.get(key);
+          if (!current || (current.sort_order ?? index) !== index) {
+            updates.push({ id: utils.normalizeId(rawId), sort_order: index });
+          }
+        });
+        if (!updates.length) return;
+        const results = await Promise.all(
+          updates.map(entry =>
+            state.supabase.from('price_items').update({ sort_order: entry.sort_order }).eq('id', entry.id)
+          )
+        );
+        const error = results.find(res => res.error)?.error;
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Порядок прайса обновлён');
+      },
       get: (id) => state.priceList.find(item => item.id === id)
     };
 
@@ -1131,7 +1161,141 @@
         await loadSupabaseData();
         utils.msg('Порядок проектов обновлён');
       },
+      async reorder(orderIds){
+        ensureSupabase();
+        const currentMap = new Map(state.projects.map(item => [String(item.id), item]));
+        const updates = [];
+        orderIds.forEach((rawId, index) => {
+          const key = String(rawId);
+          const current = currentMap.get(key);
+          if (!current || (current.sort_order ?? index) !== index) {
+            updates.push({ id: utils.normalizeId(rawId), sort_order: index });
+          }
+        });
+        if (!updates.length) return;
+        const results = await Promise.all(
+          updates.map(entry =>
+            state.supabase.from('projects').update({ sort_order: entry.sort_order }).eq('id', entry.id)
+          )
+        );
+        const error = results.find(res => res.error)?.error;
+        if (error) throw error;
+        await loadSupabaseData();
+        utils.msg('Порядок проектов обновлён');
+      },
       get: (id) => state.projects.find(p => p.id === id)
+    };
+
+    const dragManager = {
+      attach(container, selector, onReorder){
+        if (!container || !selector || typeof onReorder !== 'function') return;
+        const stateObj = container.__dragState || { initialized: false };
+        stateObj.selector = selector;
+        stateObj.onReorder = onReorder;
+        container.__dragState = stateObj;
+        if (stateObj.initialized) return;
+        stateObj.initialized = true;
+        let startOrder = [];
+        let isSubmitting = false;
+        let currentDragging = null;
+
+        const getSelector = () => container.__dragState?.selector;
+        const getOrder = () => {
+          const activeSelector = getSelector();
+          if (!activeSelector) return [];
+          return Array.from(container.querySelectorAll(activeSelector)).map(el => el.dataset.id ?? '');
+        };
+
+        container.addEventListener('dragstart', (event) => {
+          if (isSubmitting) {
+            event.preventDefault();
+            return;
+          }
+          const activeSelector = getSelector();
+          if (!activeSelector) return;
+          const item = event.target.closest(activeSelector);
+          if (!item || item.getAttribute('draggable') === 'false') return;
+          if (getOrder().length <= 1) return;
+          currentDragging = item;
+          startOrder = getOrder();
+          item.classList.add('dragging');
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', item.dataset.id || '');
+          }
+        });
+
+        container.addEventListener('dragover', (event) => {
+          if (!currentDragging || isSubmitting) return;
+          event.preventDefault();
+          const activeSelector = getSelector();
+          if (!activeSelector) return;
+          const afterElement = dragManager.getAfterElement(container, activeSelector, event.clientY);
+          if (!afterElement) {
+            container.appendChild(currentDragging);
+          } else if (afterElement !== currentDragging) {
+            container.insertBefore(currentDragging, afterElement);
+          }
+        });
+
+        container.addEventListener('drop', (event) => {
+          if (!currentDragging) return;
+          event.preventDefault();
+        });
+
+        container.addEventListener('dragend', async (event) => {
+          const activeSelector = getSelector();
+          if (!activeSelector) return;
+          const item = event.target.closest(activeSelector);
+          if (item) item.classList.remove('dragging');
+          const previousOrder = startOrder.slice();
+          startOrder = [];
+          if (!currentDragging || isSubmitting) {
+            currentDragging = null;
+            return;
+          }
+          currentDragging = null;
+          const newOrder = getOrder();
+          if (newOrder.length <= 1 || dragManager.arraysEqual(previousOrder, newOrder)) {
+            return;
+          }
+          try {
+            isSubmitting = true;
+            container.classList.add('sorting');
+            const callback = container.__dragState?.onReorder;
+            if (callback) {
+              await callback(newOrder.map(utils.normalizeId));
+            }
+          } catch (error) {
+            console.error('Drag sort error', error);
+            utils.msg('Не удалось обновить порядок: ' + (error.message || error), 'error');
+            const items = Array.from(container.querySelectorAll(activeSelector));
+            const map = new Map(items.map(el => [el.dataset.id ?? '', el]));
+            previousOrder.forEach(id => {
+              const el = map.get(id);
+              if (el) container.appendChild(el);
+            });
+          } finally {
+            isSubmitting = false;
+            container.classList.remove('sorting');
+          }
+        });
+      },
+      getAfterElement(container, selector, y){
+        const elements = Array.from(container.querySelectorAll(`${selector}:not(.dragging)`));
+        let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+        elements.forEach(el => {
+          const box = el.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            closest = { offset, element: el };
+          }
+        });
+        return closest.element;
+      },
+      arraysEqual(a, b){
+        return a.length === b.length && a.every((value, index) => value === b[index]);
+      }
     };
 
     // UI
@@ -1228,9 +1392,12 @@
           container.appendChild(empty);
           return;
         }
+        const canDrag = list.length > 1;
         list.forEach((item, index) => {
           const block = document.createElement('div');
           block.className = 'price-list-item';
+          block.dataset.id = String(item.id);
+          block.setAttribute('draggable', canDrag ? 'true' : 'false');
 
           const header = document.createElement('header');
           const title = document.createElement('h4');
@@ -1259,6 +1426,7 @@
           editBtn.type = 'button';
           editBtn.textContent = '✏️ Редактировать';
           editBtn.addEventListener('click', () => ui.editPrice(item.id));
+          editBtn.draggable = false;
           controls.appendChild(editBtn);
 
           const moveUp = document.createElement('button');
@@ -1267,6 +1435,7 @@
           moveUp.textContent = '⬆️';
           moveUp.disabled = index === 0;
           moveUp.addEventListener('click', () => priceManager.move(item.id, -1));
+          moveUp.draggable = false;
           controls.appendChild(moveUp);
 
           const moveDown = document.createElement('button');
@@ -1275,6 +1444,7 @@
           moveDown.textContent = '⬇️';
           moveDown.disabled = index === list.length - 1;
           moveDown.addEventListener('click', () => priceManager.move(item.id, 1));
+          moveDown.draggable = false;
           controls.appendChild(moveDown);
 
           const deleteBtn = document.createElement('button');
@@ -1282,11 +1452,18 @@
           deleteBtn.type = 'button';
           deleteBtn.textContent = '🗑️ Удалить';
           deleteBtn.addEventListener('click', () => priceManager.delete(item.id));
+          deleteBtn.draggable = false;
           controls.appendChild(deleteBtn);
 
           block.appendChild(controls);
           container.appendChild(block);
         });
+        ui.enablePriceDragAndDrop();
+      },
+      enablePriceDragAndDrop(){
+        const container = document.getElementById('priceList');
+        if (!container) return;
+        dragManager.attach(container, '.price-list-item', (order) => priceManager.reorder(order));
       },
       editPrice(id){
         const item = priceManager.get(id);
@@ -1351,9 +1528,12 @@
       loadProjectList(){ 
         const list = document.getElementById('projectList'); if(!list) return; list.innerHTML=''; 
         if(!state.projects.length){ list.innerHTML='<p style="color:var(--gray);text-align:center">Проекты не найдены</p>'; return; }
+        const canDrag = state.projects.length > 1;
         state.projects.forEach((p, index)=>{ 
           const wrapper = document.createElement('div'); 
           wrapper.className='project-item'; 
+          wrapper.dataset.id = String(p.id);
+          wrapper.setAttribute('draggable', canDrag ? 'true' : 'false');
 
           const title = document.createElement('h4');
           title.textContent = p.name || 'Без названия';
@@ -1371,6 +1551,7 @@
           editBtn.type = 'button';
           editBtn.textContent = '✏️ Редактировать';
           editBtn.addEventListener('click', () => ui.editProject(p.id));
+          editBtn.draggable = false;
           actions.appendChild(editBtn);
 
           const moveUp = document.createElement('button');
@@ -1379,6 +1560,7 @@
           moveUp.textContent = '⬆️';
           moveUp.disabled = index === 0;
           moveUp.addEventListener('click', () => projectManager.move(p.id, -1));
+          moveUp.draggable = false;
           actions.appendChild(moveUp);
 
           const moveDown = document.createElement('button');
@@ -1387,6 +1569,7 @@
           moveDown.textContent = '⬇️';
           moveDown.disabled = index === state.projects.length - 1;
           moveDown.addEventListener('click', () => projectManager.move(p.id, 1));
+          moveDown.draggable = false;
           actions.appendChild(moveDown);
 
           const deleteBtn = document.createElement('button');
@@ -1394,11 +1577,18 @@
           deleteBtn.type = 'button';
           deleteBtn.textContent = '🗑️ Удалить';
           deleteBtn.addEventListener('click', () => projectManager.delete(p.id));
+          deleteBtn.draggable = false;
           actions.appendChild(deleteBtn);
 
           wrapper.appendChild(actions);
           list.appendChild(wrapper); 
         }); 
+        ui.enableProjectDragAndDrop();
+      },
+      enableProjectDragAndDrop(){
+        const list = document.getElementById('projectList');
+        if (!list) return;
+        dragManager.attach(list, '.project-item', (order) => projectManager.reorder(order));
       },
       editProject(id){
         const project = projectManager.get(id); if(!project) return;
